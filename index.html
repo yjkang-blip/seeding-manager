@@ -1306,7 +1306,9 @@ const DB_DOC = doc(fsDB, "seeding", "main");
 // 저장 함수 전역 등록
 window._fbSave = async function() {
   try {
-    await setDoc(DB_DOC, JSON.parse(JSON.stringify(window.DB)));
+    // undefined 값을 null로 변환해서 Firestore에 저장
+    const clean = JSON.parse(JSON.stringify(window.DB, (k, v) => v === undefined ? null : v));
+    await setDoc(DB_DOC, clean);
   } catch(e) {
     console.error('저장 실패:', e);
   }

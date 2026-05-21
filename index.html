@@ -205,30 +205,43 @@ const uid=()=>'x'+(++_uid);
 //  SUPABASE 연동
 // ══════════════════════════════
 const SUPA_URL = 'https://tgzgzecotajybtzqwnrq.supabase.co';
-const SUPA_KEY = 'sb_publishable_Uzq4wzYoCpAXxTqlxPmVTA_LniF7r4V';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnemd6ZWNvdGFqeWJ0enF3bnJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNTY2NDIsImV4cCI6MjA5NDgzMjY0Mn0.pgooPjclAMBW6o3bVtsnKOU2tMKvRW_4gaAcPL76GgU';
 
 const supa = {
   async get(table){
-    const res = await fetch(`${SUPA_URL}/rest/v1/${table}?select=*`, {
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+    const res = await fetch(`${SUPA_URL}/rest/v1/${table}?select=*&order=round`, {
+      headers:{
+        'apikey':SUPA_KEY,
+        'Authorization':'Bearer '+SUPA_KEY,
+        'Content-Type':'application/json'
+      }
     });
+    if(!res.ok) throw new Error('get failed: '+res.status);
     return res.json();
   },
   async upsert(table, data){
-    await fetch(`${SUPA_URL}/rest/v1/${table}`, {
+    const res = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
       method:'POST',
       headers:{
-        'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,
+        'apikey':SUPA_KEY,
+        'Authorization':'Bearer '+SUPA_KEY,
         'Content-Type':'application/json',
-        'Prefer':'resolution=merge-duplicates'
+        'Prefer':'resolution=merge-duplicates,return=minimal'
       },
       body: JSON.stringify(data)
     });
+    if(!res.ok){
+      const err = await res.text();
+      throw new Error('upsert failed: '+err);
+    }
   },
   async del(table, id){
-    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${id}`, {
+    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
       method:'DELETE',
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+      headers:{
+        'apikey':SUPA_KEY,
+        'Authorization':'Bearer '+SUPA_KEY
+      }
     });
   }
 };

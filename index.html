@@ -205,7 +205,7 @@ const uid=()=>'x'+(++_uid);
 //  SUPABASE 연동
 // ══════════════════════════════
 const SUPA_URL = 'https://tgzgzecotajybtzqwnrq.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnemd6ZWNvdGFqeWJ0enF3bnJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNTY2NDIsImV4cCI6MjA5NDgzMjY0Mn0.pgooPjclAMBW6o3bVtsnKOU2tMKvRW_4gaAcPL76GgU';
+const SUPA_KEY = 'sb_publishable_Uzq4wzYoCpAXxTqlxPmVTA_LniF7r4V';
 
 const supa = {
   async get(table){
@@ -250,13 +250,20 @@ async function loadDB(){
       pgDash();
       return;
     }
-  }catch(e){console.log('Supabase 로드 실패, 로컬 사용',e);}
-  // DB가 비어있으면 seed 데이터 넣기
-  seed();
-  await saveAll();
-  hideLoading();
-  renderSB();
-  pgDash();
+    // DB 비어있으면 seed 후 저장
+    seed();
+    await saveAll();
+    hideLoading();
+    renderSB();
+    pgDash();
+  }catch(e){
+    console.log('Supabase 오류, 로컬 사용:', e);
+    try{const s=localStorage.getItem('sdmgr14');if(s)DB=JSON.parse(s);}catch(e2){}
+    if(!DB.weekly.length) seed();
+    hideLoading();
+    renderSB();
+    pgDash();
+  }
 }
 
 async function save(){
@@ -1347,15 +1354,16 @@ function restoreData(input){
 // ══════════════════════════════
 //  INIT
 // ══════════════════════════════
-function resetData(){
+async function resetData(){
   if(!confirm('⚠️ 모든 데이터를 기본값(엑셀 원본)으로 초기화할까요?\n직접 추가/수정한 내용은 모두 사라집니다.')) return;
   try{localStorage.removeItem('sdmgr14');}catch(e){}
   seed();
-  saveAll();
+  toast('Supabase에 저장 중...');
+  await saveAll();
   cur={tab:'dash',campType:'릴스',id:null};
   renderSB();
   pgDash();
-  toast('데이터가 초기화되었습니다');
+  toast('데이터 초기화 및 저장 완료 ✅');
 }
 
 // 삭제 함수들도 Supabase 반영

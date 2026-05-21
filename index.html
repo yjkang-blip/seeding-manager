@@ -202,108 +202,15 @@ let _uid=100;
 const uid=()=>'x'+(++_uid);
 
 // ══════════════════════════════
-//  SUPABASE 연동
+//  DATA LOAD / SAVE
 // ══════════════════════════════
-const SUPA_URL = 'https://tgzgzecotajybtzqwnrq.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRnemd6ZWNvdGFqeWJ0enF3bnJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNTY2NDIsImV4cCI6MjA5NDgzMjY0Mn0.pgooPjclAMBW6o3bVtsnKOU2tMKvRW_4gaAcPL76GgU';
-
-const supa = {
-  async get(table){
-    const res = await fetch(`${SUPA_URL}/rest/v1/${table}?select=*&order=round`, {
-      headers:{
-        'apikey':SUPA_KEY,
-        'Authorization':'Bearer '+SUPA_KEY,
-        'Content-Type':'application/json'
-      }
-    });
-    if(!res.ok) throw new Error('get failed: '+res.status);
-    return res.json();
-  },
-  async upsert(table, data){
-    const res = await fetch(`${SUPA_URL}/rest/v1/${table}`, {
-      method:'POST',
-      headers:{
-        'apikey':SUPA_KEY,
-        'Authorization':'Bearer '+SUPA_KEY,
-        'Content-Type':'application/json',
-        'Prefer':'resolution=merge-duplicates,return=minimal'
-      },
-      body: JSON.stringify(data)
-    });
-    if(!res.ok){
-      const err = await res.text();
-      throw new Error('upsert failed: '+err);
-    }
-  },
-  async del(table, id){
-    await fetch(`${SUPA_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
-      method:'DELETE',
-      headers:{
-        'apikey':SUPA_KEY,
-        'Authorization':'Bearer '+SUPA_KEY
-      }
-    });
-  }
-};
-
-async function loadDB(){
-  showLoading();
-  try{
-    const [weekly, monthly, campaigns] = await Promise.all([
-      supa.get('weekly'),
-      supa.get('monthly'),
-      supa.get('campaigns')
-    ]);
-    if(weekly.length||monthly.length||campaigns.length){
-      DB.weekly = weekly.map(w=>({...w, weekIds:w.week_ids||[], people:w.people||[]}));
-      DB.monthly = monthly.map(m=>({...m, weekIds:m.week_ids||[], people:m.people||[]}));
-      DB.campaigns = campaigns.map(c=>({...c, people:c.people||[]}));
-    } else {
-      // DB 비어있으면 seed 후 자동 저장
-      seed();
-      await saveAll();
-    }
-  }catch(e){
-    // Supabase 실패시 로컬 사용
-    try{const s=localStorage.getItem('sdmgr14');if(s)DB=JSON.parse(s);}catch(e2){}
-    if(!DB.weekly.length){
-      seed();
-      saveAll().catch(()=>{});
-    }
-  }
-  hideLoading();
-  renderSB();
-  pgDash();
+function loadDB(){
+  try{const s=localStorage.getItem('sdmgr14');if(s){DB=JSON.parse(s);return;}}catch(e){}
+  seed();
 }
-
-async function save(){
-  // 변경된 데이터 Supabase에 저장 (로컬도 백업)
+function save(){
   try{localStorage.setItem('sdmgr14',JSON.stringify(DB));}catch(e){}
-  // 비동기로 Supabase 저장 (화면 블로킹 없이)
-  saveAll().catch(e=>console.log('저장 오류',e));
 }
-
-async function saveAll(){
-  const wPromises = DB.weekly.map(w=>
-    supa.upsert('weekly',{id:w.id,round:w.round,date:w.date,people:w.people,week_ids:w.weekIds||[]})
-  );
-  const mPromises = DB.monthly.map(m=>
-    supa.upsert('monthly',{id:m.id,month:m.month,note:m.note,week_ids:m.weekIds||[]})
-  );
-  const cPromises = DB.campaigns.map(c=>
-    supa.upsert('campaigns',{id:c.id,name:c.name,type:c.type,round:c.round,date:c.date,people:c.people})
-  );
-  await Promise.all([...wPromises,...mPromises,...cPromises]);
-}
-
-function showLoading(){
-  document.getElementById('page').innerHTML=`
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;color:#888">
-      <div style="width:36px;height:36px;border:3px solid #e8e8e8;border-top-color:var(--g2);border-radius:50%;animation:spin 0.8s linear infinite"></div>
-      <div style="font-size:13px">데이터 불러오는 중...</div>
-    </div>`;
-}
-function hideLoading(){}
 
 
 const mkW=(id,round,date,people)=>({id,round,date,people});
@@ -1172,10 +1079,10 @@ function updMNote(mid,val){const m=DB.monthly.find(x=>x.id===mid);if(m){m.note=v
 function updCDate(cid,val){const c=DB.campaigns.find(x=>x.id===cid);if(c){c.date=val;save();renderSB();toast('날짜 수정됨');}}
 function updCRound(cid,val){const c=DB.campaigns.find(x=>x.id===cid);if(c){c.round=parseInt(val)||c.round;save();renderSB();renderPage();toast('차수 수정됨');}}
 
-function delW(id){if(!confirm('삭제?'))return;DB.weekly=DB.weekly.filter(w=>w.id!==id);DB.monthly.forEach(m=>{m.weekIds=m.weekIds.filter(x=>x!==id)});supa.del('weekly',id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
-function delM(id){if(!confirm('삭제?'))return;DB.monthly=DB.monthly.filter(m=>m.id!==id);supa.del('monthly',id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
+function delW(id){if(!confirm('삭제?'))return;DB.weekly=DB.weekly.filter(w=>w.id!==id);DB.monthly.forEach(m=>{m.weekIds=m.weekIds.filter(x=>x!==id)});save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
+function delM(id){if(!confirm('삭제?'))return;DB.monthly=DB.monthly.filter(m=>m.id!==id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
 function delP(wid,pid){const w=DB.weekly.find(x=>x.id===wid);w.people=w.people.filter(p=>p.id!==pid);save();renderSB();renderPage();toast('삭제됨');}
-function delC(id){if(!confirm('삭제?'))return;DB.campaigns=DB.campaigns.filter(c=>c.id!==id);supa.del('campaigns',id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
+function delC(id){if(!confirm('삭제?'))return;DB.campaigns=DB.campaigns.filter(c=>c.id!==id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
 function delCP(cid,pid){const c=DB.campaigns.find(x=>x.id===cid);c.people=c.people.filter(p=>p.id!==pid);save();renderPage();toast('삭제됨');}
 
 // ══════════════════════════════
@@ -1364,22 +1271,21 @@ function restoreData(input){
 // ══════════════════════════════
 //  INIT
 // ══════════════════════════════
-async function resetData(){
+function resetData(){
   if(!confirm('⚠️ 모든 데이터를 기본값(엑셀 원본)으로 초기화할까요?\n직접 추가/수정한 내용은 모두 사라집니다.')) return;
   try{localStorage.removeItem('sdmgr14');}catch(e){}
   seed();
-  toast('Supabase에 저장 중...');
-  await saveAll();
+
+
   cur={tab:'dash',campType:'릴스',id:null};
   renderSB();
   pgDash();
   toast('데이터 초기화 및 저장 완료 ✅');
 }
 
-// 삭제 함수들도 Supabase 반영
-
-showLoading();
 loadDB();
+renderSB();
+pgDash();
 </script>
 </body>
 </html>

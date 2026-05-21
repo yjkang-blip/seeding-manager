@@ -1304,11 +1304,21 @@ const fsDB = getFirestore(fbApp);
 const DB_DOC = doc(fsDB, "seeding", "main");
 
 // 저장 함수 전역 등록
+function cleanForFirestore(obj) {
+  if (Array.isArray(obj)) return obj.map(cleanForFirestore);
+  if (obj !== null && typeof obj === 'object') {
+    const out = {};
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      out[k] = (v === undefined || v === null) ? '' : cleanForFirestore(v);
+    }
+    return out;
+  }
+  return obj;
+}
 window._fbSave = async function() {
   try {
-    // undefined 값을 null로 변환해서 Firestore에 저장
-    const clean = JSON.parse(JSON.stringify(window.DB, (k, v) => v === undefined ? null : v));
-    await setDoc(DB_DOC, clean);
+    await setDoc(DB_DOC, cleanForFirestore(window.DB));
   } catch(e) {
     console.error('저장 실패:', e);
   }

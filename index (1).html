@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌿 시딩 매니저</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g1:#1D4E3A;--g2:#2D6A4F;--g3:#52B788;--g4:#D8F3DC;--g5:#F0FAF4;--g6:#B7E4C7;
+  --w:#fff;--gray1:#111;--gray2:#444;--gray3:#888;--gray4:#bbb;--gray5:#e8e8e8;--gray6:#f5f5f5;
+  --r:10px;--rs:7px;--sh:0 1px 3px rgba(0,0,0,.05),0 4px 14px rgba(0,0,0,.05);
+}
+html,body{height:100%;font-family:'Pretendard',sans-serif;font-size:14px;color:var(--gray1);background:#f0f2f0}
+a{color:var(--g2);text-decoration:none}a:hover{text-decoration:underline}
+
+/* LAYOUT */
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* SIDEBAR */
+.sb{width:216px;background:var(--g1);display:flex;flex-direction:column;flex-shrink:0}
+.sb-logo{padding:18px 16px 12px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sb-logo h1{font-size:15px;font-weight:700;color:#fff;letter-spacing:-.2px}
+.sb-logo p{font-size:10px;color:rgba(255,255,255,.4);margin-top:2px}
+.sb-list{flex:1;overflow-y:auto;padding:8px 7px 12px}
+.sb-ttl{font-size:10px;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:.06em;padding:10px 9px 4px;text-transform:uppercase}
+.sbi{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:var(--rs);cursor:pointer;font-size:12px;color:rgba(255,255,255,.6);transition:all .13s;border:none;background:transparent;width:100%;text-align:left}
+.sbi:hover{background:rgba(255,255,255,.09);color:#fff}
+.sbi.on{background:rgba(255,255,255,.17);color:#fff;font-weight:700}
+.sbi .rn{font-size:13px;font-weight:700;min-width:24px}
+.sbi .dt{font-size:10px;color:rgba(255,255,255,.35)}
+.sbi .bk{margin-left:auto;font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(255,255,255,.11);color:rgba(255,255,255,.65);flex-shrink:0}
+.sbi.on .bk{background:var(--g3);color:var(--g1)}
+.sb-add{display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:var(--rs);cursor:pointer;font-size:11px;color:rgba(255,255,255,.38);border:1px dashed rgba(255,255,255,.16);background:transparent;width:100%;transition:all .15s;margin-top:5px}
+.sb-add:hover{color:rgba(255,255,255,.72);border-color:rgba(255,255,255,.34)}
+.sb-empty{font-size:12px;color:rgba(255,255,255,.22);text-align:center;padding:32px 10px;line-height:1.8}
+
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* TOP NAV */
+.topnav{background:var(--w);border-bottom:1px solid var(--gray5);padding:0 24px;display:flex;align-items:center;flex-shrink:0}
+.nav-logo{font-size:13px;font-weight:700;color:var(--g2);margin-right:18px;padding:14px 0}
+.mt{padding:13px 15px;font-size:13px;font-weight:600;color:var(--gray3);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;font-family:inherit}
+.mt:hover{color:var(--gray1)}
+.mt.on{color:var(--g1);border-bottom-color:var(--g1)}
+.nav-sep{width:1px;height:20px;background:var(--gray5);margin:0 6px;flex-shrink:0}
+.mt.hist{color:#7c3aed}.mt.hist.on{color:#7c3aed;border-bottom-color:#7c3aed}
+.nav-act{margin-left:auto;display:flex;gap:8px;align-items:center;padding:8px 0}
+
+/* PAGE */
+.page{flex:1;overflow-y:auto;padding:22px 24px}
+
+/* CAMPAIGN SUBTABS */
+.stab-wrap{display:flex;gap:6px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--gray5);align-items:center;flex-wrap:wrap}
+.stab{padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--gray5);background:var(--w);color:var(--gray3);transition:all .15s;font-family:inherit}
+.stab:hover{border-color:var(--gray4);color:var(--gray1)}
+.stab.on{background:var(--g1);color:#fff;border-color:var(--g1)}
+.stab[data-type="릴스"].on{background:#3730A3;border-color:#3730A3}
+.stab[data-type="2차 활용"].on{background:#065F46;border-color:#065F46}
+.stab-new{padding:6px 13px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px dashed var(--gray4);background:transparent;color:var(--gray3);font-family:inherit;transition:all .15s}
+.stab-new:hover{border-color:var(--g3);color:var(--g2)}
+.camp-count{font-size:10px;padding:1px 5px;border-radius:8px;background:rgba(255,255,255,.3);color:inherit;margin-left:3px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:var(--rs);border:1px solid var(--gray5);background:var(--w);font-size:12px;font-family:inherit;cursor:pointer;color:var(--gray2);font-weight:500;transition:all .14s;line-height:1;white-space:nowrap}
+.btn:hover{background:var(--gray6);border-color:var(--gray4)}
+.btn.pri{background:var(--g1);color:#fff;border-color:var(--g1)}.btn.pri:hover{background:var(--g2)}
+.btn.suc{background:#eaf7ef;color:#1a6b3a;border-color:#a8dab9}.btn.suc:hover{background:#d5f0e3}
+.btn.dan{color:#b91c1c;border-color:#fca5a5;background:#fff1f1}.btn.dan:hover{background:#fee2e2}
+.btn.sm{padding:4px 9px;font-size:11px}
+.btn.ico{padding:6px 8px}
+.dw{display:inline-flex;align-items:center;gap:5px}
+.dw span{font-size:11px;color:#999}
+.dw input[type=date]{padding:4px 8px;border-radius:var(--rs);border:1px solid var(--gray5);font-size:12px;font-family:inherit;color:var(--gray1)}
+.dw input[type=date]:focus{outline:none;border-color:var(--g3)}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.sc{background:var(--w);border-radius:var(--r);border:1px solid var(--gray5);padding:14px 15px;box-shadow:var(--sh)}
+.sc-l{font-size:10px;font-weight:600;color:var(--gray3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
+.sc-n{font-size:22px;font-weight:700;line-height:1}
+.sc-n small{font-size:11px;font-weight:400;color:var(--gray3);margin-left:2px}
+.sc-s{font-size:11px;color:var(--gray3);margin-top:3px}
+
+/* TABLE */
+.tw{background:var(--w);border-radius:var(--r);border:1px solid var(--gray5);box-shadow:var(--sh);overflow:hidden;margin-bottom:14px}
+.tw-h{padding:11px 15px;border-bottom:1px solid var(--gray5);display:flex;align-items:center;gap:8px}
+.tw-h h3{font-size:13px;font-weight:700}
+.tw-h .sub{font-size:11px;color:var(--gray3)}
+.tsc{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:7px 11px;font-size:10px;font-weight:700;color:var(--gray3);border-bottom:1px solid var(--gray5);background:#f9f9f9;letter-spacing:.05em;white-space:nowrap;text-transform:uppercase}
+td{padding:8px 11px;border-bottom:1px solid var(--gray5);vertical-align:middle;font-size:12px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f8fbf8}
+.tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;white-space:nowrap}
+.t-dm{background:#EEF2FF;color:#3730A3}
+.t-em{background:#FEF3C7;color:#92400E}
+.t-ph{background:#FFF4E6;color:#9a3412}
+.t-ty{background:var(--g4);color:var(--g1)}
+.t-fe{background:#FEE2E2;color:#991B1B}
+.nodata{text-align:center;padding:50px;color:var(--gray4);font-size:13px}
+
+/* MONTHLY BLOCKS */
+.wblock{background:var(--w);border-radius:var(--r);border:1px solid var(--gray5);box-shadow:var(--sh);overflow:hidden;margin-bottom:12px}
+.wb-h{display:flex;align-items:center;gap:9px;padding:11px 15px;background:var(--g5);border-bottom:1px solid var(--g6);cursor:pointer;user-select:none}
+.wb-h:hover{background:#e4f5eb}
+.wb-h .rnd{font-size:13px;font-weight:700;color:var(--g1)}
+.wb-h .dt{font-size:11px;color:var(--g2)}
+.wb-h .bk{margin-left:auto;font-size:11px;padding:2px 7px;border-radius:10px;background:var(--g4);color:var(--g2)}
+.wb-h .arr{font-size:12px;color:var(--g2);transition:transform .2s;margin-left:4px}
+.wb-h.open .arr{transform:rotate(180deg)}
+
+/* DASHBOARD */
+.dbgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+.dc{background:var(--w);border-radius:var(--r);border:1px solid var(--gray5);padding:16px;box-shadow:var(--sh)}
+.dc h3{font-size:10px;font-weight:700;color:var(--gray3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:11px}
+.ri{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--gray5);cursor:pointer}
+.ri:last-child{border-bottom:none}
+.ri:hover .rin{color:var(--g2)}
+.ri-ico{width:28px;height:28px;border-radius:var(--rs);background:var(--g4);color:var(--g1);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rin{font-size:13px;font-weight:500}
+.ris{font-size:11px;color:var(--gray3);margin-top:1px}
+.ribk{margin-left:auto;font-size:11px;padding:2px 7px;border-radius:8px;background:var(--gray6);color:var(--gray3);white-space:nowrap}
+
+/* MODAL */
+.ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:999;align-items:center;justify-content:center;padding:20px}
+.ov.open{display:flex}
+.modal{background:var(--w);border-radius:var(--r);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.mh{padding:16px 20px 12px;border-bottom:1px solid var(--gray5);display:flex;align-items:center;justify-content:space-between}
+.mh h3{font-size:15px;font-weight:700}
+.mb{padding:16px 20px}
+.mf{padding:12px 20px;border-top:1px solid var(--gray5);display:flex;justify-content:flex-end;gap:8px}
+.fr{margin-bottom:12px}
+.fr label{display:block;font-size:11px;font-weight:700;color:var(--gray2);margin-bottom:4px}
+.fr input,.fr select,.fr textarea{width:100%;padding:8px 11px;border-radius:var(--rs);border:1px solid var(--gray5);background:var(--w);font-size:13px;color:var(--gray1);font-family:inherit;transition:border .15s}
+.fr input:focus,.fr select:focus,.fr textarea:focus{outline:none;border-color:var(--g3);box-shadow:0 0 0 3px rgba(82,183,136,.1)}
+.fr textarea{resize:vertical;min-height:100px}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sec{font-size:10px;font-weight:700;color:var(--g2);letter-spacing:.07em;text-transform:uppercase;padding:5px 0 4px;border-bottom:1px solid var(--g4);margin:12px 0 10px}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--g1);color:#fff;padding:10px 16px;border-radius:var(--r);font-size:13px;font-weight:600;z-index:9999;transform:translateY(60px);opacity:0;transition:all .25s;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.toast.on{transform:translateY(0);opacity:1}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--gray5);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <nav class="sb">
+    <div class="sb-logo">
+      <h1>🌿 시딩 매니저</h1>
+      <p>Seeding Campaign Manager</p>
+    </div>
+    <div class="sb-list" id="sb-list">
+      <div class="sb-empty">위 탭을 눌러<br>목록을 확인하세요</div>
+    </div>
+    <div style="padding:10px 8px;border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:5px">
+      <button onclick="backupData()" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:11px;font-family:inherit;cursor:pointer;text-align:left">💾 데이터 백업</button>
+      <label style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:11px;font-family:inherit;cursor:pointer;display:block">
+        📂 백업 불러오기
+        <input type="file" accept=".json" style="display:none" onchange="restoreData(this)">
+      </label>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+    <nav class="topnav">
+      <span class="nav-logo">🌿 시딩</span>
+      <button class="mt on" onclick="mainTab('dash')">대시보드</button>
+      <button class="mt"    onclick="mainTab('weekly')">주간 리스트</button>
+      <button class="mt"    onclick="mainTab('monthly')">월간 통합</button>
+      <button class="mt"    onclick="mainTab('campaign')">캠페인</button>
+      <div class="nav-sep"></div>
+      <button class="mt hist" onclick="mainTab('history')">📊 진행이력</button>
+      <div class="nav-act" id="nav-act"></div>
+    </nav>
+    <div class="page" id="page"></div>
+  </div>
+</div>
+
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════
+//  DATA
+// ══════════════════════════════
+let DB={weekly:[],monthly:[],campaigns:[]};
+let cur={tab:'dash',campType:'릴스',id:null};
+let _uid=100;
+const uid=()=>'x'+(++_uid);
+
+// ══════════════════════════════
+//  DATA LOAD / SAVE
+// ══════════════════════════════
+function loadDB(){
+  // Firebase 모듈에서 처리
+}
+function save(){
+  if(window._fbSave) window._fbSave();
+  else { try{localStorage.setItem('sdmgr14',JSON.stringify(DB));}catch(e){} }
+}
+
+
+
+const mkW=(id,round,date,people)=>({id,round,date,people});
+const mkC=(id,name,type,round,date,people)=>({id,name,type,round,date,people});
+const pp=(handle,url,followers,product,product2,contact,address,type,note)=>({id:'p'+uid(),handle,url,followers,product,product2,contact,address,type,note});
+const cp=(handle,url,followers,product,contact,address,fee,note)=>({id:'cp'+uid(),handle,url,followers,product,contact,address,fee,note});
+
+function seed(){
+  DB.weekly=[
+    mkW('w1',1,'2026-03-24',[
+      pp('무아(muum_mooa)','https://www.instagram.com/muum_mooa',26000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드','스토리 업로드'),
+      pp('뉴진(mayijinn)','https://www.instagram.com/mayijinn/',25000,'Glossy Mid Tangle Twist Bag_Teal Green','','newzin0704@gmail.com','','피드',''),
+      pp('나옹(naongs2)','https://www.instagram.com/naongs2/',10000,'Glossy Mid Tangle Twist Bag_Mustard','','nayonpark96@gmail.com','','피드','브랜더진 도트버블 백 브라운 진행'),
+      pp('김내운(nnaunee)','https://www.instagram.com/nnaunee/',3293,'Glossy Mid Tangle Twist Bag_Mustard','','projectye1122@gmail.com','','피드',''),
+      pp('정원(jwxx_10)','https://www.instagram.com/jwxx_10/',15000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드','피드 업로드'),
+      pp('유빈(newwdoor__)','https://www.instagram.com/newwdoor__/',12000,'Glossy Mid Tangle Twist Bag_Mustard','','aybayb0205@gmail.com','','피드','피드 업로드'),
+      pp('기마라니(gimaraani)','https://www.instagram.com/gimaraani/',23000,'Glossy Mid Tangle Twist Bag_Mustard','','keemaraan@naver.com','','피드',''),
+      pp('제뉴어리','https://www.youtube.com/@janu.ary_16',3470,'Glossy Mid Tangle Twist Bag_Mustard','','kkimmi00@naver.com','','유튜브','유튜브 업로드'),
+      pp('보영(b0y0ung0y)','https://www.youtube.com/@보영b0y0ung-hby',367,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','유튜브',''),
+      pp('조현인(wonderonwaves)','https://www.instagram.com/wonderonwaves/',7273,'Glossy Mid Tangle Twist Bag_Mustard','','hyeonin14@gmail.com','','피드',''),
+      pp('보미(bbxx.3_3)','https://www.instagram.com/bbxx.3_3/',135000,'Glossy Mid Tangle Twist Bag_Mustard','','momi33bomi@gmail.com','','피드',''),
+      pp('지수(jisoo39)','https://www.instagram.com/jisoo39/',37000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드','기한, 가이드 x'),
+      pp('김가훤(ga_honii_)','https://www.instagram.com/ga_honii_/',173000,'Glossy Mid Tangle Twist Bag_Mustard','','gahonii1104@gmail.com','','피드','피드 업로드'),
+      pp('늘이농(neul_e_.nong)','https://www.instagram.com/neul_e_.nong/',231000,'Glossy Mid Tangle Twist Bag_Mustard','','neulenong.official@gmail.com','','피드','릴스 업로드'),
+      pp('니아쥬(nuage_look)','https://www.instagram.com/nuage_look/',55000,'Glossy Mid Tangle Twist Bag_Mustard','','4swithme@naver.com','','피드 or 릴스',''),
+      pp('이웜','https://www.youtube.com/@leewarm_',63000,'Glossy Mid Tangle Twist Bag_Mustard','','warmleeu@naver.com','','유튜브',''),
+      pp('니들(kxxyounghxx)','https://www.instagram.com/kxxyounghxx/',24000,'Glossy Mid Tangle Twist Bag_Mustard','','kxxyounghxx@gmail.com','','유튜브 or 피드',''),
+      pp('지은(name_jieun)','https://www.instagram.com/name_jieun/',324000,'Glossy Mid Tangle Twist Bag_Ivory','','DM','','피드','퀵 발송'),
+    ]),
+    mkW('w2',2,'2026-03-26',[
+      pp('소영걸(soyoungirl)','https://www.instagram.com/soyoungirl/',58000,'Glossy Mid Tangle Twist Bag_Teal Green','','kimsy0326@naver.com','','피드',''),
+      pp('탕탕(__xhxsxyx)','https://www.instagram.com/__xhxsxyx/',9609,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드','피드 업로드'),
+      pp('은애(eunaegg)','https://www.instagram.com/eunaegg/',12000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('하나(hanadool)','https://www.instagram.com/hanadool/',35000,'Glossy Mid Tangle Twist Bag_Teal Green','','DM','','단순 선물',''),
+    ]),
+    mkW('w3',3,'2026-03-27',[
+      pp('윤이(ynxx.k)','https://www.instagram.com/ynxx.k/',19000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('choisimaum','https://www.instagram.com/choisimaum/',37000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('감도','https://www.youtube.com/@gamdohhh',2500,'Glossy Mid Tangle Twist Bag_Mustard','','kimsy0326@naver.com','','유튜브',''),
+      pp('정민영(jungmeenyung)','https://www.instagram.com/jungmeenyung/',18000,'Glossy Mid Tangle Twist Bag_Mustard','','minyeong.jeong@wconcept.co.kr','','피드',''),
+    ]),
+    mkW('w4',4,'2026-03-30',[
+      pp('윤그린(yoongreeny)','https://www.instagram.com/yoongreeny/',135000,'Glossy Mid Tangle Twist Bag_Ivory','','DM','','단순 선물',''),
+      pp('딥무드(_deepmood)','https://www.instagram.com/_deepmood/',33000,'Glossy Mid Tangle Twist Bag_Teal Green','','deepmoodwork@gmail.com','','단순 선물',''),
+      pp('배배자매(belly_d_)','https://www.instagram.com/belly_d_/',149000,'Glossy Mid Tangle Twist Bag_Teal Green','','daram19941@naver.com','','단순 선물',''),
+      pp('강은(river__is)','https://www.instagram.com/river__is/',110000,'Glossy Mid Tangle Twist Bag_Teal Green','','parkriveris@gmail.com','','단순 선물',''),
+    ]),
+    mkW('w5',5,'2026-04-06',[
+      pp('전예진','https://www.instagram.com/jjeonyeee/',2769,'Glossy Mid Tangle Twist Bag_Black','','','','단순 선물',''),
+      pp('정지영(szi.oe)','https://www.instagram.com/szi.oe/',18000,'Glossy Mid Tangle Twist Bag_Ivory','','','','단순 선물',''),
+    ]),
+    mkW('w6',6,'2026-04-08',[
+      pp('유니(u.nii)','https://www.instagram.com/_u.nii/',54000,'Glossy Mid Tangle Twist Bag_Teal Green','','DM','','단순 선물',''),
+      pp('긍히(geunghee_)','https://www.instagram.com/geunghee_/',43000,'Glossy Mid Tangle Twist Bag_Teal Green','','kingseunghui02@gmail.com','','단순 선물',''),
+      pp('누가영(nugayoung)','https://www.instagram.com/nugayoung/',429000,'Glossy Mid Tangle Twist Bag_Mustard','','team.nugayoung@gmail.com','','단순 선물',''),
+      pp('정혜임(hyeim__j)','https://www.instagram.com/hyeim__j/',198000,'Glossy Mid Tangle Twist Bag_Mustard','','hyeim@cableagency.co.kr','','단순 선물','케이블 에이전시'),
+      pp('초록(dd9987_)','https://www.instagram.com/dd9987_/',125000,'Glossy Mid Tangle Twist Bag_Mustard','','contact@texture.team','','피드','텍스처 엔터'),
+      pp('홍보현(hongvely0)','https://www.instagram.com/hongvely0/',111000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('정은(keemjungeunn)','https://www.instagram.com/keemjungeunn/',25000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('이상아(2eesangah)','https://www.instagram.com/2eesangah/',12000,'Glossy Mid Tangle Twist Bag_Mustard','','2eesangah@naver.com','','피드',''),
+      pp('단희(keemdani)','https://www.instagram.com/keemdani/',212000,'Glossy Mid Tangle Twist Bag_Mustard','','keemdani@icecreative.kr','','단순 선물',''),
+      pp('성지혜(ji_hye_s_)','https://www.instagram.com/ji_hye_s_',53000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+    ]),
+    mkW('w7',7,'2026-04-16',[
+      pp('단희(keemdani)','https://www.instagram.com/keemdani/',212000,'Glossy Mid Tangle Twist Bag_Mustard','','keemdani@icecreative.kr','','단순 선물',''),
+      pp('성지혜(ji_hye_s_)','https://www.instagram.com/ji_hye_s_',53000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('장혜지(Vi0424ola__)','https://www.instagram.com/Vi0424ola__',88000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('베리랜드','https://www.youtube.com/@lmrholic/videos',1810,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','유튜브',''),
+      pp('라라진','https://www.instagram.com/lara._.jinnie/',76000,'Glossy Mid Tangle Twist Bag_Teal Green','','larajinnie@naver.com','','피드',''),
+      pp('자매화(jamaehwapic)','https://www.instagram.com/jamaehwapic/',7398,'Glossy Mid Tangle Twist Bag_Mustard','','jamaehwa@naver.com','','피드',''),
+      pp('강은(flonnii)','https://www.instagram.com/flonnii/',12000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('전지혜(zee.hye)','https://www.instagram.com/zee.hye',44000,'Glossy Mid Tangle Twist Bag_Ash Pink','','jihyeooo12@gmail.com','','피드',''),
+      pp('어나더섬머','https://www.instagram.com/another__summer/',31000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('미희','https://www.youtube.com/@Mihee',151000,'Glossy Mid Tangle Twist Bag_Teal Green','','miheee22@naver.com','','단순 선물',''),
+    ]),
+    mkW('w8',8,'2026-04-16',[
+      pp('나문(nnalovendlessly)','https://www.instagram.com/nnalovendlessly',128000,'Glossy Mid Tangle Twist Bag_Mustard','','nna_0112@naver.com','','단순 선물',''),
+      pp('박서현(Hyuniverse___)','https://www.instagram.com/Hyuniverse___',85000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('이아원(leeeong_)','https://www.instagram.com/leeeong_',89000,'Glossy Large Tangle Twist Bag_Black','','DM','','피드',''),
+      pp('조민지(tweetysummer)','https://www.instagram.com/tweetysummer',37000,'Glossy Mid Tangle Twist Bag_Ivory','','summer_nineteen@naver.com','','피드',''),
+      pp('수빈(suvlnn)','https://www.instagram.com/suvlnn/',18000,'Glossy Mid Tangle Twist Bag_Ivory','','suvlnn@naver.com','','피드',''),
+      pp('김지수(jidue_)','https://www.instagram.com/jidue_',104000,'Glossy Mid Tangle Twist Bag_Mustard','','rlawltn0630@naver.com','','피드',''),
+      pp('장수빈(sub.nnn)','https://www.instagram.com/sub.nnn/',132000,'Glossy Mid Tangle Twist Bag_Mustard','','jjsubeen@gmail.com','','피드',''),
+      pp('허재이(herloveliness_)','https://www.instagram.com/herloveliness_',51000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('지혜사랑(jihye_sarang)','https://www.instagram.com/jihye_sarang/',38000,'Glossy Mid Tangle Twist Bag_Mustard','','jihyesarang@dmil.kr','','단순 선물',''),
+      pp('문은비(eunbnim)','https://www.instagram.com/eunbnim',52000,'Glossy Mid Tangle Twist Bag_Mustard','','zoay0@naver.com','','피드',''),
+      pp('양예지(yezi_mong)','https://www.instagram.com/yezi_mong/',59000,'Glossy Mid Tangle Twist Bag_Mustard','','leonamong@naver.com','','피드',''),
+      pp('박신해(Thelifeisonlyonce)','https://www.instagram.com/Thelifeisonlyonce',139000,'Glossy Mid Tangle Twist Bag_Mustard','','moc1liam2g@gmail.com','','피드',''),
+    ]),
+    mkW('w9',9,'2026-04-27',[
+      pp('은별(rlo_blxlzl)','https://www.instagram.com/rlo_blxlzl/',126000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('갱(gaeng_daily)','https://www.instagram.com/gaeng_daily/',7930,'Glossy Mid Tangle Twist Bag_Mustard','','gaeng.daily@gmail.com','','피드',''),
+      pp('eh(p_eha)','https://www.instagram.com/p_eha/',4678,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('킥십이(kicksheep.club)','https://www.instagram.com/kicksheep.club/',2285,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+      pp('페로(thisis_pero)','https://www.instagram.com/thisis_pero/',7181,'Glossy Mid Tangle Twist Bag_Mustard','','pero.forwork@gmail.com','','피드',''),
+      pp('세니','https://www.youtube.com/@세니-seni/shorts',7520,'Glossy Mid Tangle Twist Bag_Mustard','','seni1001@naver.com','','단순 선물',''),
+      pp('김부장 김캡틴','https://www.youtube.com/@Kingboojang/videos',5260,'Glossy Mid Tangle Twist Bag_Mustard','','be.midimalist@gmail.com','','유튜브',''),
+      pp('한삐우','https://www.youtube.com/@hanbbiwoo',126000,'Glossy Mid Tangle Twist Bag_Mustard','','hanbbiwoo@onthelook.co.kr','','단순 선물',''),
+      pp('so__yin','https://www.instagram.com/so__yin/',19000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','피드',''),
+    ]),
+    mkW('w10',10,'2026-04-29',[
+      pp('서록','https://www.youtube.com/@by_seorok',46100,'Glossy Mid Tangle Twist Bag_Mustard','','bloom_min@naver.com','','유튜브',''),
+      pp('민(2lsol)','https://www.instagram.com/2lsol/',5696,'Dot Bubble Bag_Glossy Ivory','','DM','','피드',''),
+      pp('종니월드','https://www.youtube.com/@jjongneeworld/featured',6320,'Glossy Mid Tangle Twist Bag_Mustard','','jongeun0305@gmail.com','','유튜브',''),
+      pp('김오디너리','https://www.youtube.com/@oordinaryyy',21700,'Glossy Mid Tangle Twist Bag_Mustard','','usual_ly@naver.com','','유튜브',''),
+      pp('유지원(tangerineshower)','https://www.instagram.com/tangerineshower',124000,'Glossy Mid Tangle Twist Bag_Teal Green','','yuzu@dmil.kr','','단순 선물',''),
+    ]),
+    mkW('w11',11,'2026-05-08',[
+      pp('민음사','',0,'Lake 13" Laptop Clutch_Blue','Dot Bubble Bag_Brown','010-4322-0816','서울시 강남구 도산대로1길 62 강남출판문화센터 504호','피드',''),
+      pp('이상미(e_sangmi)','https://www.instagram.com/e_sangmi/',0,'Glossy Large Tangle Twist Bag_Ash Pink','Lip Bag_Black','010-9698-1121','경기도 광주시 능평동 490-17 라테르포레 103동 402호','피드',''),
+      pp('개횬(_gaehyun)','https://www.instagram.com/_gaehyun/',0,'Glossy Mid Tangle Twist Bag_Mustard','Lip Bag_Black','010-5725-5718','서울시 마포구 잔다리로 3안길 35, 3층','피드',''),
+      pp('_zl_ming_','https://www.instagram.com/_zl_ming_/',0,'Glossy Small Tangle Twist Bag_Ivory','Dot Bubble Bag_Glossy Blue','010-2026-7652','경기도 김포시 장기동 1958-4 403호','피드',''),
+      pp('lilili.o','https://www.instagram.com/lilili.o/',0,'Glossy Small Tangle Twist Bag_Teal Green','Dot Bubble Bag_Brown','010-2445-4122','부산 해운대구 해운대해변로 365 102-702','피드',''),
+      pp('오호이(ohoi.insight)','https://www.instagram.com/ohoi.insight/',0,'Glossy Grid Duffle L Bag_Black','','010-3139-1933','경기도 광주시 문형산길 138 3단지 303동 501호','피드',''),
+      pp('이호퍼(2.hopper)','https://www.instagram.com/2.hopper/',0,'Dot Bubble Bag_Glossy Blue','Lip Bag_Black','010-9864-5866','경기도 성남시 수정구 복정동 680-6번지 303호','피드',''),
+      pp('hana0864','https://www.instagram.com/hana0864/',0,'Dot Bubble Bag_Green','','010-9203-0864','양산시 물금읍 메기로 203 유림노르웨이아침 1114호','피드',''),
+    ]),
+    mkW('w12',12,'2026-05-14',[
+      pp('-민하(blossomh_)','https://www.instagram.com/blossomh_/',226000,'Glossy Mid Tangle Twist Bag_Ivory','','DM','','시딩',''),
+      pp('차경은','https://www.instagram.com/ruddms____/',64000,'Glossy Mid Tangle Twist Bag_Mustard','','DM','','시딩',''),
+      pp('마이모멘또','https://www.youtube.com/@mymomento8803',93700,'Mid Tangle Twist Bag_Red','','mayerling81@gmail.com','','시딩',''),
+      pp('솜달','https://www.youtube.com/@sommdal',15800,'Glossy Large Tangle Twist Bag_Mustard','','somdal_@naver.com','','시딩',''),
+      pp('딱지(__ddakzi)','https://www.instagram.com/__ddakzi/',36000,'Glossy Mid Tangle Twist Bag_Ivory','','DM','','시딩',''),
+      pp('주미니','https://www.youtube.com/@juminii/featured',190000,'Glossy Mid Tangle Twist Bag_Ivory','','bangusuk1004@gmail.com','','시딩',''),
+      pp('빛날 영(bitnal.young)','https://www.instagram.com/bitnal.young/',11000,'Glossy Mid Tangle Twist Bag_Ivory','Glossy Small Tangle Twist Bag_Mustard','bitnalyoung@lefericreator.com','','시딩',''),
+    ]),
+  ];
+  DB.monthly=[
+    {id:'m3',month:'2026-03',note:'뉴탱글 3월 배송 리스트',weekIds:['w1','w2','w3','w4']},
+    {id:'m4',month:'2026-04',note:'뉴탱글 4월 배송 리스트',weekIds:['w5','w6','w7','w8','w9','w10']},
+    {id:'m5',month:'2026-05',note:'뉴탱글 5월 배송 리스트',weekIds:['w11','w12']},
+  ];
+  DB.campaigns=[
+    mkC('cp1','릴스 캠페인','릴스',1,'2026-05-01',[
+      cp('전지혜(zee.hye)','https://www.instagram.com/zee.hye',44000,'Dot Bubble Bag_8 컬러','jihyeooo12@gmail.com','','30만원','제품 수령 후 1주 후 업로드'),
+      cp('나혜미','https://www.instagram.com/nahyemi_/',40000,'Dot Bubble Bag_Glossy Ivory','nahyemi_@waffent.com','','30만원','브랜더진'),
+      cp('기마라니(gimaraani)','https://www.instagram.com/gimaraani/',23000,'Dot Bubble Bag_Glossy Blue/Green/Brown','keemaraan@naver.com','','40만원','2차 활용 협의 후 진행'),
+      cp('유빈(newwdoor__)','https://www.instagram.com/newwdoor__/',12000,'Dot Bubble Bag_Glossy Blue','aybayb0205@gmail.com','','50만원','5월 2째주 업로드 예정'),
+      cp('나옹(naongs2)','https://www.instagram.com/naongs2/',10000,'Dot Bubble Bag_Glossy Blue/Glossy Ivory','nayonpark96@gmail.com','','30만원','5/10 업로드'),
+    ]),
+    mkC('cp2','릴스 캠페인','릴스',2,'2026-05-10',[
+      cp('손희재(0o0.soni)','https://www.instagram.com/0o0.soni/',17000,'Dot Bubble Bag_Glossy Silver/Ivory/Green','DM','','50만원','5/15 업로드'),
+      cp('박수진(jewel.soo)','https://www.instagram.com/jewel.soo',41000,'Dot Bubble Bag_Glossy Silver','DM','','30만원','5/13 업로드'),
+    ]),
+    mkC('cp3','2차 활용 캠페인','2차 활용',1,'2026-05-14',[
+      cp('차현주(lilili.o)','https://www.instagram.com/lilili.o/',1468,'Glossy Small Tangle Twist Bag_Teal Green / Dot Bubble Bag_Brown','010-2445-4122','부산 해운대구 해운대해변로 365 102-702','',''),
+      cp('_zl_ming_','https://www.instagram.com/_zl_ming_/',1294,'Glossy Small Tangle Twist Bag_Ivory / Dot Bubble Bag_Glossy Blue','010-2026-7652','경기도 김포시 장기동 1958-4 403호','',''),
+      cp('hana0864','https://www.instagram.com/hana0864/',2037,'Dot Bubble Bag_Green','010-9203-0864','양산시 물금읍 메기로 203 유림노르웨이아침 1114호','',''),
+      cp('hootchuu','https://www.instagram.com/hootchuu/',2864,'','DM','','',''),
+      cp('주이(kimjuuhe)','https://www.instagram.com/kimjuuhe/',1606,'','DM','','',''),
+      cp('민영(myminomi)','https://www.instagram.com/myminomi/',1523,'Dot Bubble Bag_Green / Small Tangle Twist Bag_Red','010-9324-5967','서울시 성동구 도선동105(트윈빌)806호','',''),
+      cp('세노(2sennno)','https://www.instagram.com/2sennno/',1603,'','DM','','',''),
+      cp('정주(juunngjuuu)','https://www.instagram.com/juunngjuuu/',2194,'','DM','','',''),
+      cp('가인(gainn_ee)','https://www.instagram.com/gainn_ee/',5181,'','DM','','',''),
+    ]),
+  ];
+  save();
+}
+
+// ══════════════════════════════
+//  HELPERS
+// ══════════════════════════════
+const e=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const g=id=>(document.getElementById(id)||{}).value||'';
+const today=()=>new Date().toISOString().slice(0,10);
+const isDM=c=>!c||(c||'').toUpperCase()==='DM';
+const normH=s=>(s||'').replace(/[\s\n\r()_\-]/g,'').toLowerCase();
+const typeOpts=sel=>['피드','릴스','유튜브','단순 선물','시딩','피드 or 릴스','유튜브 or 피드','기타'].map(t=>`<option${t===sel?' selected':''}>${t}</option>`).join('');
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('on');setTimeout(()=>el.classList.remove('on'),2400);}
+
+// 캠페인 참여 배지 (핸들 기준)
+function campBadges(handle){
+  const key=normH(handle);
+  return DB.campaigns.filter(c=>c.people.some(p=>normH(p.handle)===key)).map(c=>{
+    const col=c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':
+              c.type==='릴스'?'background:#EEF2FF;color:#3730A3':'background:#FEF3C7;color:#92400E';
+    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-block;margin:1px">${c.name} ${c.round}차</span>`;
+  }).join('');
+}
+
+// 주간에서 드롭다운으로 캠페인 추가
+function addToCamp(handle,campId){
+  if(!campId) return;
+  const c=DB.campaigns.find(x=>x.id===campId);if(!c)return;
+  if(c.people.some(p=>normH(p.handle)===normH(handle))){toast('이미 추가됨');return;}
+  let src=null;DB.weekly.forEach(w=>{const f=w.people.find(p=>normH(p.handle)===normH(handle));if(f)src=f;});
+  c.people.push({id:'cp'+uid(),handle:src?.handle||handle,url:src?.url||'',followers:src?.followers||0,product:src?.product||'',contact:src?.contact||'',address:src?.address||'',fee:'',note:''});
+  save();renderSB();renderPage();toast(`${handle} → ${c.name} ${c.round}차 추가됨`);
+}
+
+// ══════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════
+function mainTab(tab){
+  if(cur.tab!==tab) cur.id=null;
+  cur.tab=tab;
+  document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',['dash','weekly','monthly','campaign','history'][i]===tab));
+  document.getElementById('nav-act').innerHTML='';
+  renderSB();
+  renderPage();
+}
+
+function campSubTab(type){
+  cur.campType=type;
+  cur.id=null;
+  renderSB();
+  renderPage();
+}
+
+function renderSB(){
+  const el=document.getElementById('sb-list'),t=cur.tab;
+  let h='';
+  if(t==='dash'||t==='history'){
+    el.innerHTML=`<div class="sb-empty">위 탭을 눌러<br>목록을 확인하세요</div>`;return;
+  }
+  if(t==='weekly'){
+    // 월별로 그룹핑
+    const grouped={};
+    DB.weekly.forEach(w=>{
+      const ym=w.date.slice(0,7);
+      if(!grouped[ym])grouped[ym]=[];
+      grouped[ym].push(w);
+    });
+    Object.keys(grouped).sort().forEach(ym=>{
+      const mon=parseInt(ym.slice(5))+'월';
+      const weeks=grouped[ym].sort((a,b)=>a.round-b.round);
+      h+=`<div class="sb-ttl">${mon}</div>`;
+      weeks.forEach((w,idx)=>{
+        const done=w.people.filter(p=>p.shipped).length;
+        const total=w.people.length;
+        const allDone=done===total&&total>0;
+        h+=`<button class="sbi${cur.id===w.id?' on':''}" onclick="selW('${w.id}')">
+          <span class="rn">${idx+1}차</span>
+          <span class="dt">${w.date.slice(5).replace('-','/')}</span>
+          <span class="bk" style="${allDone?'background:#52B788;color:#fff':''}">
+            ${done>0?done+'/':''}${total}
+          </span>
+        </button>`;
+      });
+    });
+    h+=`<button class="sb-add" onclick="openAddW()">＋ 새 주간 리스트</button>`;
+  } else if(t==='monthly'){
+    h+=`<div class="sb-ttl">월간 리스트</div>`;
+    [...DB.monthly].sort((a,b)=>b.month.localeCompare(a.month)).forEach(m=>{
+      const lbl=m.month.slice(0,4)+'년 '+parseInt(m.month.slice(5))+'월';
+      const tot=DB.weekly.filter(w=>m.weekIds.includes(w.id)).reduce((a,w)=>a+w.people.length,0);
+      h+=`<button class="sbi${cur.id===m.id?' on':''}" onclick="selM('${m.id}')">
+        <span>${lbl}</span><span class="bk">${tot}</span></button>`;
+    });
+    h+=`<button class="sb-add" onclick="openAddM()">＋ 새 월간 리스트</button>`;
+  } else if(t==='campaign'){
+    h+=`<div class="sb-ttl">${cur.campType} 캠페인</div>`;
+    DB.campaigns.filter(c=>c.type===cur.campType).sort((a,b)=>b.round-a.round).forEach(c=>{
+      h+=`<button class="sbi${cur.id===c.id?' on':''}" onclick="selC('${c.id}')">
+        <span class="rn">${c.round}차</span><span class="dt">${c.date.slice(5).replace('-','/')}</span>
+        <span class="bk">${c.people.length}</span></button>`;
+    });
+    h+=`<button class="sb-add" onclick="openAddCampRound()">＋ 새 ${cur.campType} 차수</button>`;
+  }
+  el.innerHTML=h;
+}
+
+function selW(id){cur.id=id;cur.tab='weekly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===1));renderSB();renderPage();}
+function selM(id){cur.id=id;cur.tab='monthly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===2));renderSB();renderPage();}
+function selC(id){
+  const c=DB.campaigns.find(x=>x.id===id);
+  if(c) cur.campType=c.type;
+  cur.id=id;cur.tab='campaign';
+  document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===3));
+  renderSB();renderPage();
+}
+
+// ══════════════════════════════
+//  PAGE RENDER
+// ══════════════════════════════
+function renderPage(){
+  document.getElementById('nav-act').innerHTML='';
+  const t=cur.tab;
+  if(t==='dash') pgDash();
+  else if(t==='weekly') pgWeekly();
+  else if(t==='monthly') pgMonthly();
+  else if(t==='campaign') pgCampaign();
+  else if(t==='history') pgHistory();
+}
+
+// ── 대시보드 ──
+function pgDash(){
+  const total=DB.weekly.reduce((a,w)=>a+w.people.length,0);
+  const totalF=DB.weekly.flatMap(w=>w.people).reduce((a,p)=>a+(p.followers||0),0);
+  const totalFee=DB.campaigns.flatMap(c=>c.people).reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
+  const recent=[...DB.weekly].sort((a,b)=>b.round-a.round).slice(0,5);
+  const recentC=[...DB.campaigns].filter(c=>c.type==='릴스').sort((a,b)=>b.round-a.round).slice(0,3);
+  const sec=DB.campaigns.find(c=>c.type==='2차 활용');
+  document.getElementById('nav-act').innerHTML=`<button class="btn" style="font-size:11px;color:#999" onclick="resetData()" title="데이터 초기화 (주의: 모든 데이터가 기본값으로 리셋됩니다)">🔄 데이터 초기화</button>`;
+  document.getElementById('page').innerHTML=`
+  <div class="stats">
+    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">${DB.weekly.length}차 누적</div></div>
+    <div class="sc"><div class="sc-l">총 팔로워 도달</div><div class="sc-n">${Math.round(totalF/10000)}<small>만</small></div></div>
+    <div class="sc"><div class="sc-l">캠페인 유형</div><div class="sc-n">${new Set(DB.campaigns.map(c=>c.type)).size}<small>종</small></div><div class="sc-s">릴스 · 2차 활용</div></div>
+    <div class="sc"><div class="sc-l">캠페인 비용</div><div class="sc-n">${totalFee}<small>만원</small></div></div>
+  </div>
+  <div class="dbgrid">
+    <div class="dc"><h3>최근 주간 리스트</h3>
+      ${recent.map(w=>`<div class="ri" onclick="selW('${w.id}')">
+        <div class="ri-ico">${getMonthRound(w.id).replace(/\d+월 /,'')}</div>
+        <div><div class="rin">${getMonthRound(w.id)}</div><div class="ris">${w.date}</div></div>
+        <span class="ribk">${w.people.length}명</span>
+      </div>`).join('')}
+    </div>
+    <div class="dc"><h3>캠페인 현황</h3>
+      ${recentC.map(c=>{const fee=c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
+        return`<div class="ri" onclick="selC('${c.id}')">
+          <div class="ri-ico" style="background:#EEF2FF;color:#3730A3">${c.round}차</div>
+          <div><div class="rin">${c.name} ${c.round}차</div><div class="ris">${c.date} · ${c.people.length}명</div></div>
+          <span class="ribk">${fee}만원</span>
+        </div>`;}).join('')}
+      ${sec?`<div class="ri" onclick="selC('${sec.id}')">
+        <div class="ri-ico" style="background:#D1FAE5;color:#065F46">2차</div>
+        <div><div class="rin">2차 활용 캠페인</div><div class="ris">${sec.date} · ${sec.people.length}명</div></div>
+        <span class="ribk">진행중</span>
+      </div>`:''}
+    </div>
+  </div>`;
+}
+
+// ── 주간 리스트 ──
+function pgWeekly(){
+  const w=cur.id?DB.weekly.find(x=>x.id===cur.id):null;
+  if(!w){
+    const sorted=[...DB.weekly].sort((a,b)=>b.round-a.round);
+    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddW()">＋ 새 주간 리스트</button>`;
+    document.getElementById('page').innerHTML=`
+    <div class="stats">
+      <div class="sc"><div class="sc-l">총 차수</div><div class="sc-n">${DB.weekly.length}<small>차</small></div></div>
+      <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${DB.weekly.reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
+      <div class="sc"><div class="sc-l">이번달</div><div class="sc-n">${DB.weekly.filter(w=>w.date.startsWith(new Date().toISOString().slice(0,7))).reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
+      <div class="sc"><div class="sc-l">최근 차수</div><div class="sc-n" style="font-size:14px">${DB.weekly.length?getMonthRound(DB.weekly.reduce((a,b)=>a.round>b.round?a:b).id):'-'}</div></div>
+    </div>
+    <div class="tw">
+      <div class="tw-h"><h3>전체 주간 리스트</h3><span class="sub">차수/날짜 직접 수정 가능</span></div>
+      <div class="tsc"><table>
+        <thead><tr><th>차수</th><th>날짜</th><th>인원</th><th>팔로워 합계</th><th></th></tr></thead>
+        <tbody>${sorted.map(w=>`<tr>
+          <td><input type="number" value="${w.round}" min="1" style="width:50px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updWRound('${w.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
+          <td><input type="date" value="${w.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updWDate('${w.id}',this.value)"></td>
+          <td>${w.people.length}명</td>
+          <td>${(w.people.reduce((a,p)=>a+(p.followers||0),0)/10000).toFixed(1)}만</td>
+          <td style="white-space:nowrap">
+            <button class="btn sm" onclick="selW('${w.id}')">열기 →</button>
+            <button class="btn sm dan" onclick="delW('${w.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+    return;
+  }
+  const totalF=w.people.reduce((a,p)=>a+(p.followers||0),0);
+  document.getElementById('nav-act').innerHTML=
+    `<div class="dw"><span>날짜</span><input type="date" value="${w.date}" onchange="updWDate('${w.id}',this.value)"></div>
+     <button class="btn pri" onclick="openAddP('${w.id}')">＋ 인원 추가</button>
+     <button class="btn" onclick="openPaste('${w.id}')">📋 붙여넣기</button>
+     <button class="btn suc" onclick="expW('${w.id}')">⬇ 시딩 엑셀</button>
+     <button class="btn" style="background:#FFF7ED;color:#C2410C;border-color:#FED7AA;font-weight:600" onclick="expOrder('${w.id}')">📦 로젠 발주서</button>
+     <button class="btn dan ico" onclick="delW('${w.id}')">✕</button>`;
+  document.getElementById('page').innerHTML=`
+  <div class="stats">
+    <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${w.people.length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">팔로워 합계</div><div class="sc-n">${(totalF/10000).toFixed(1)}<small>만</small></div></div>
+    <div class="sc"><div class="sc-l">DM 컨택</div><div class="sc-n">${w.people.filter(p=>isDM(p.contact)).length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">이메일 컨택</div><div class="sc-n">${w.people.filter(p=>!isDM(p.contact)&&p.contact).length}<small>명</small></div></div>
+  </div>
+  <div class="tw">
+    <div class="tw-h"><h3>${getMonthRound(w.id)} 주간 시딩 리스트</h3><span class="sub">${w.date} · 총 ${w.people.length}명 · 배송완료 ${w.people.filter(p=>p.shipped).length}명</span></div>
+    <div class="tsc"><table>
+      <thead><tr><th>#</th><th>배송 상태</th><th>활동명</th><th>캠페인</th><th>채널 URL</th><th>팔로워</th><th>제품 1</th><th>제품 2</th><th>컨택 포인트</th><th>전화번호</th><th>배송지</th><th>유형</th><th>비고</th><th></th></tr></thead>
+      <tbody>${w.people.length===0?`<tr><td colspan="14" class="nodata">인원 추가 또는 📋 붙여넣기를 이용하세요</td></tr>`:
+        w.people.map((p,i)=>{
+          const badges=campBadges(p.handle);
+          const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)));
+          const dropdown=avail.length?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCamp('${p.handle}',this.value);this.value=''">
+            <option value="">+ 캠페인 추가</option>
+            ${avail.map(c=>`<option value="${c.id}">${c.name} ${c.round}차</option>`).join('')}
+          </select>`:'';
+          const shipped=p.shipped;
+          const rowBg=shipped?'background:#f0faf4':badges?'background:#FAFFFE':'';
+          return`<tr style="${rowBg}">
+            <td style="color:#ccc">${i+1}</td>
+            <td style="text-align:center">
+              <button onclick="toggleShipped('${w.id}','${p.id}',${!shipped})"
+                style="font-size:10px;padding:3px 8px;border-radius:20px;border:none;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap;${shipped?'background:#D1FAE5;color:#065F46':'background:#FEE2E2;color:#991B1B'}">
+                ${shipped?'배송완료':'배송대기'}
+              </button>
+            </td>
+            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}">${e(p.handle)}</td>
+            <td style="min-width:150px">${badges||'<span style="font-size:10px;color:#ccc">—</span>'}${dropdown}</td>
+            <td>${p.url?`<a href="${e(p.url)}" target="_blank">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
+            <td>${p.followers?p.followers.toLocaleString():'-'}</td>
+            <td style="max-width:150px;font-size:11px">${e(p.product)}</td>
+            <td style="max-width:120px;font-size:11px;color:#999">${p.product2?e(p.product2):'-'}</td>
+            <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
+            <td style="font-size:11px;color:#666">${p.phone?e(p.phone):'<span style="color:#ddd">—</span>'}</td>
+            <td style="font-size:11px;color:#888;max-width:130px">${p.address?e(p.address):'<span style="color:#ddd">—</span>'}</td>
+            <td><span class="tag t-ty">${e(p.type)||'-'}</span></td>
+            <td style="font-size:11px;color:#999;max-width:100px">${e(p.note)||''}</td>
+            <td style="white-space:nowrap">
+              <button class="btn sm" onclick="openEditP('${w.id}','${p.id}')">수정</button>
+              <button class="btn sm dan" onclick="delP('${w.id}','${p.id}')">✕</button>
+            </td>
+          </tr>`;}).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+// ── 월간 통합 ──
+function pgMonthly(){
+  const m=cur.id?DB.monthly.find(x=>x.id===cur.id):null;
+  if(!m){
+    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddM()">＋ 새 월간 리스트</button>`;
+    document.getElementById('page').innerHTML=`
+    <div class="stats">
+      <div class="sc"><div class="sc-l">월간 리스트</div><div class="sc-n">${DB.monthly.length}<small>개</small></div></div>
+      <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${DB.weekly.reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
+      <div class="sc"><div class="sc-l">최근 월</div><div class="sc-n" style="font-size:14px">${DB.monthly.length?[...DB.monthly].sort((a,b)=>b.month.localeCompare(a.month))[0].month.replace('-','년 ')+'월':'-'}</div></div>
+      <div class="sc"></div>
+    </div>
+    <div class="tw"><div class="tw-h"><h3>전체 월간 리스트</h3></div><div class="tsc"><table>
+      <thead><tr><th>월</th><th>메모</th><th>연결 주차</th><th>총 인원</th><th></th></tr></thead>
+      <tbody>${[...DB.monthly].sort((a,b)=>b.month.localeCompare(a.month)).map(m=>{
+        const lnk=DB.weekly.filter(w=>m.weekIds.includes(w.id));
+        return`<tr>
+          <td style="font-weight:700">${m.month.replace('-','년 ')+'월'}</td>
+          <td><input type="text" value="${e(m.note)}" style="width:180px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updMNote('${m.id}',this.value)"></td>
+          <td>${lnk.map(w=>getMonthRound(w.id)).join(', ')||'-'}</td>
+          <td>${lnk.reduce((a,w)=>a+w.people.length,0)}명</td>
+          <td style="white-space:nowrap">
+            <button class="btn sm" onclick="selM('${m.id}')">열기 →</button>
+            <button class="btn sm dan" onclick="delM('${m.id}')">🗑</button>
+          </td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div></div>`;
+    return;
+  }
+  const lbl=m.month.slice(0,4)+'년 '+parseInt(m.month.slice(5))+'월';
+  const linked=DB.weekly.filter(w=>m.weekIds.includes(w.id)).sort((a,b)=>a.round-b.round);
+  const all=linked.flatMap(w=>w.people);
+  const totalF=all.reduce((a,p)=>a+(p.followers||0),0);
+  document.getElementById('nav-act').innerHTML=
+    `<button class="btn pri" onclick="openLinkW('${m.id}')">＋ 주간 연결</button>
+     <button class="btn suc" onclick="expM('${m.id}')">⬇ 월간 엑셀</button>
+     <button class="btn dan ico" onclick="delM('${m.id}')">✕</button>`;
+  document.getElementById('page').innerHTML=`
+  <div class="stats">
+    <div class="sc"><div class="sc-l">연결 주차</div><div class="sc-n">${linked.length}<small>차</small></div></div>
+    <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${all.length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">팔로워 합계</div><div class="sc-n">${(totalF/10000).toFixed(1)}<small>만</small></div></div>
+    <div class="sc"><div class="sc-l">포함 주차</div><div class="sc-n" style="font-size:12px">${linked.map(w=>getMonthRound(w.id)).join(', ')||'-'}</div></div>
+  </div>
+  ${linked.length===0?`<div class="nodata" style="background:#fff;border-radius:10px;border:1px solid #e8e8e8">연결된 주간 리스트가 없습니다</div>`:''}
+  ${linked.map(w=>`<div class="wblock">
+    <div class="wb-h open" id="wh-${w.id}" onclick="togB('${w.id}')">
+      <span class="rnd">${getMonthRound(w.id)}</span><span class="dt">${w.date}</span>
+      <span class="bk">${w.people.length}명</span><span class="arr">▾</span>
+    </div>
+    <div id="wb-${w.id}"><div class="tsc"><table>
+      <thead><tr><th>활동명</th><th>캠페인</th><th>채널</th><th>팔로워</th><th>제품</th><th>연락처</th><th>배송지</th><th>유형</th></tr></thead>
+      <tbody>${w.people.map(p=>{const cb=campBadges(p.handle);return`<tr style="${cb?'background:#FAFFFE':''}">
+        <td style="font-weight:700">${e(p.handle)}</td>
+        <td style="min-width:120px">${cb||`<span style="font-size:10px;color:#ccc">—</span>`}</td>
+        <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
+        <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
+        <td style="font-size:11px">${e(p.product)}${p.product2?`<br><span style="color:#bbb">${e(p.product2)}</span>`:''}</td>
+        <td><span class="tag ${isDM(p.contact)?'t-dm':'t-em'}">${e(p.contact)||'-'}</span></td>
+        <td style="font-size:11px;color:#888">${p.address?e(p.address):'-'}</td>
+        <td><span class="tag t-ty">${e(p.type)||'-'}</span></td>
+      </tr>`;}).join('')}</tbody>
+    </table></div></div>
+  </div>`).join('')}`;
+}
+function togB(wid){const b=document.getElementById('wb-'+wid),h=document.getElementById('wh-'+wid);if(!b)return;const hide=b.style.display!=='none';b.style.display=hide?'none':'';h.classList.toggle('open',!hide);}
+
+// ── 캠페인 ──
+function pgCampaign(){
+  // 서브탭 데이터
+  const types=[...new Set(DB.campaigns.map(c=>c.type))];
+  if(!types.includes(cur.campType)&&types.length) cur.campType=types[0];
+  const filtered=DB.campaigns.filter(c=>c.type===cur.campType).sort((a,b)=>b.round-a.round);
+  const c=cur.id?DB.campaigns.find(x=>x.id===cur.id&&x.type===cur.campType):null;
+
+  // 서브탭 HTML
+  const subHtml=`<div class="stab-wrap">
+    ${types.map(t=>`<button class="stab${cur.campType===t?' on':''}" data-type="${t}" onclick="campSubTab('${t}')">${t==='릴스'?'🎬':t==='2차 활용'?'♻️':'📌'} ${t}<span class="camp-count">${DB.campaigns.filter(c=>c.type===t).length}</span></button>`).join('')}
+    <button class="stab-new" onclick="openNewCampType()">＋ 새 유형</button>
+  </div>`;
+
+  if(!c){
+    // 목록 화면
+    const totalP=filtered.reduce((a,c)=>a+c.people.length,0);
+    const totalF=filtered.flatMap(c=>c.people).reduce((a,p)=>a+(p.followers||0),0);
+    const totalFee=filtered.flatMap(c=>c.people).reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
+    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddCampRound()">＋ 새 ${cur.campType} 차수</button>`;
+    document.getElementById('page').innerHTML=`${subHtml}
+    <div class="stats">
+      <div class="sc"><div class="sc-l">총 차수</div><div class="sc-n">${filtered.length}<small>차</small></div></div>
+      <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${totalP}<small>명</small></div></div>
+      <div class="sc"><div class="sc-l">팔로워 합계</div><div class="sc-n">${(totalF/10000).toFixed(1)}<small>만</small></div></div>
+      <div class="sc"><div class="sc-l">${cur.campType==='릴스'?'총 비용':'배송지 확보'}</div><div class="sc-n">${cur.campType==='릴스'?totalFee+'<small>만원</small>':filtered.flatMap(c=>c.people).filter(p=>p.address).length+'<small>명</small>'}</div></div>
+    </div>
+    <div class="tw">
+      <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${cur.campType} 캠페인</h3><span class="sub">${filtered.length}차 · 총 ${totalP}명</span></div>
+      <div class="tsc"><table>
+        <thead><tr><th>차수</th><th>날짜</th><th>인원</th><th>팔로워</th><th>${cur.campType==='릴스'?'비용':'배송지 확보'}</th><th></th></tr></thead>
+        <tbody>${filtered.length===0?`<tr><td colspan="6" class="nodata">차수를 추가해주세요</td></tr>`:
+          filtered.map(c=>{
+            const fee=c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
+            const f=c.people.reduce((a,p)=>a+(p.followers||0),0);
+            return`<tr>
+              <td><input type="number" value="${c.round}" min="1" style="width:48px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updCRound('${c.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
+              <td><input type="date" value="${c.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updCDate('${c.id}',this.value)"></td>
+              <td>${c.people.length}명</td>
+              <td>${(f/10000).toFixed(1)}만</td>
+              <td>${cur.campType==='릴스'?fee+'만원':c.people.filter(p=>p.address).length+'명'}</td>
+              <td style="white-space:nowrap">
+                <button class="btn sm" onclick="selC('${c.id}')">열기 →</button>
+                <button class="btn sm dan" onclick="delC('${c.id}')">🗑</button>
+              </td>
+            </tr>`;}).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+    return;
+  }
+
+  // 상세 화면
+  const totalF=c.people.reduce((a,p)=>a+(p.followers||0),0);
+  const totalFee=c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
+  document.getElementById('nav-act').innerHTML=
+    `<div class="dw"><span>날짜</span><input type="date" value="${c.date}" onchange="updCDate('${c.id}',this.value)"></div>
+     <button class="btn pri" onclick="openAddCP('${c.id}')">＋ 인원 추가</button>
+     <button class="btn suc" onclick="expC('${c.id}')">⬇ 엑셀</button>
+     <button class="btn dan ico" onclick="delC('${c.id}')">✕</button>`;
+  document.getElementById('page').innerHTML=`${subHtml}
+  <div class="stats">
+    <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${c.people.length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">팔로워 합계</div><div class="sc-n">${(totalF/10000).toFixed(1)}<small>만</small></div></div>
+    ${cur.campType==='릴스'?`<div class="sc"><div class="sc-l">총 비용</div><div class="sc-n">${totalFee}<small>만원</small></div></div>`
+    :`<div class="sc"><div class="sc-l">배송지 확보</div><div class="sc-n">${c.people.filter(p=>p.address).length}<small>명</small></div></div>`}
+    <div class="sc"><div class="sc-l">평균 팔로워</div><div class="sc-n" style="font-size:16px">${c.people.length?Math.round(totalF/c.people.length).toLocaleString():0}</div></div>
+  </div>
+  <div class="tw">
+    <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${c.name} ${c.round}차</h3><span class="sub">총 ${c.people.length}명${cur.campType==='릴스'?' · '+totalFee+'만원':''}</span></div>
+    <div class="tsc"><table>
+      <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>연락처</th><th>배송지</th>${cur.campType==='릴스'?'<th>비용</th>':''}<th>비고</th><th></th></tr></thead>
+      <tbody>${c.people.length===0?`<tr><td colspan="9" class="nodata">인원을 추가해주세요</td></tr>`:
+        c.people.map((p,i)=>`<tr>
+          <td style="color:#ccc">${i+1}</td>
+          <td style="font-weight:700">${e(p.handle)}</td>
+          <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
+          <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
+          <td style="max-width:160px;font-size:11px">${e(p.product)||'<span style="color:#bbb">미정</span>'}</td>
+          <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
+          <td style="font-size:11px;color:#666;max-width:150px">${p.address?e(p.address):'<span style="color:#bbb">미입력</span>'}</td>
+          ${cur.campType==='릴스'?`<td><span class="tag t-fe">${e(p.fee)||'-'}</span></td>`:''}
+          <td style="font-size:11px;color:#888;max-width:120px">${e(p.note)||''}</td>
+          <td style="white-space:nowrap">
+            <button class="btn sm" onclick="openEditCP('${c.id}','${p.id}')">수정</button>
+            <button class="btn sm dan" onclick="delCP('${c.id}','${p.id}')">✕</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+// ── 진행이력 ──
+function pgHistory(){
+  const prevSearch=document.getElementById('hist-search')?.value||'';
+  document.getElementById('nav-act').innerHTML=
+    `<input id="hist-search" type="text" placeholder="이름·핸들 검색..." value="${prevSearch}"
+      style="padding:6px 11px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;width:180px" oninput="pgHistory()">
+     <button class="btn suc" onclick="expHistory()">⬇ 통합 엑셀</button>`;
+  const map={};
+  DB.weekly.forEach(w=>w.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].seedings.push({round:w.round,date:w.date,product:p.product,monthRound:getMonthRound(w.id)});}));
+  DB.campaigns.forEach(c=>c.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].camps.push({name:c.name,type:c.type,round:c.round,product:p.product,fee:p.fee,note:p.note});}));
+  const search=(document.getElementById('hist-search')?.value||prevSearch).trim().toLowerCase();
+  let entries=Object.values(map).filter(x=>!search||normH(x.handle).includes(search.replace(/\s/g,'')));
+  entries.sort((a,b)=>(b.camps.length>0?1:0)-(a.camps.length>0?1:0)||(Math.max(0,...b.seedings.map(s=>s.round))-Math.max(0,...a.seedings.map(s=>s.round))));
+  const statusBadge=x=>{
+    if(x.camps.length>0&&x.seedings.length>0)return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#EDE9FE;color:#5B21B6;font-weight:600">시딩+캠페인</span>`;
+    if(x.camps.length>0)return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#EEF2FF;color:#3730A3;font-weight:600">캠페인만</span>`;
+    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:var(--g4);color:var(--g1);font-weight:600">시딩</span>`;
+  };
+  document.getElementById('page').innerHTML=`
+  <div class="stats">
+    <div class="sc"><div class="sc-l">총 인물</div><div class="sc-n">${entries.length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">시딩+캠페인</div><div class="sc-n">${entries.filter(x=>x.camps.length>0&&x.seedings.length>0).length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">시딩 2회+</div><div class="sc-n">${entries.filter(x=>x.seedings.length>1).length}<small>명</small></div></div>
+    <div class="sc"><div class="sc-l">캠페인 전용</div><div class="sc-n">${entries.filter(x=>x.camps.length>0&&x.seedings.length===0).length}<small>명</small></div></div>
+  </div>
+  <div class="tw">
+    <div class="tw-h"><h3>인물별 진행 이력</h3><span class="sub">${entries.length}명${search?' (검색결과)':''} · 시딩+캠페인 참여자 먼저</span></div>
+    <div class="tsc"><table>
+      <thead><tr><th>#</th><th>활동명</th><th>팔로워</th><th>상태</th><th>시딩 차수</th><th>시딩 제품</th><th>캠페인</th><th>캠페인 제품</th><th>비용</th></tr></thead>
+      <tbody>${entries.length===0?`<tr><td colspan="9" class="nodata">검색 결과 없음</td></tr>`:
+        entries.map((x,i)=>`<tr style="${x.camps.length>0&&x.seedings.length>0?'background:#FAFAFF':''}">
+          <td style="color:#ccc">${i+1}</td>
+          <td style="font-weight:700">${e(x.handle)}</td>
+          <td style="font-size:11px">${x.followers?x.followers.toLocaleString():'-'}</td>
+          <td>${statusBadge(x)}</td>
+          <td style="font-size:11px;color:var(--g2);font-weight:600">${x.seedings.map(s=>s.monthRound||s.round+'차').join(', ')||'-'}</td>
+          <td style="font-size:11px;max-width:140px">${[...new Set(x.seedings.map(s=>s.product).filter(Boolean))].join('<br>')||'-'}</td>
+          <td style="font-size:11px">${x.camps.map(c=>`<span style="font-size:10px;padding:1px 6px;border-radius:4px;${c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':'background:#EEF2FF;color:#3730A3'}">${c.name} ${c.round}차</span>`).join(' ')||'-'}</td>
+          <td style="font-size:11px;max-width:140px">${[...new Set(x.camps.map(c=>c.product).filter(Boolean))].join('<br>')||'-'}</td>
+          <td style="font-size:11px">${x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+// ══════════════════════════════
+//  MODALS
+// ══════════════════════════════
+const om=html=>{document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('open');};
+const cm=()=>document.getElementById('ov').classList.remove('open');
+document.getElementById('ov').addEventListener('click',ev=>{if(ev.target===document.getElementById('ov'))cm();});
+
+// 주간 추가
+function openAddW(){
+  const next=DB.weekly.length?Math.max(...DB.weekly.map(w=>w.round))+1:1;
+  om(`<div class="mh"><h3>새 주간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fg">
+    <div class="fr"><label>차수</label><input id="f1" type="number" value="${next}" min="1"></div>
+    <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
+  </div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddW()">추가</button></div>`);
+}
+function saveAddW(){const round=parseInt(g('f1'))||1,date=g('f2'),id='w'+uid();DB.weekly.push({id,round,date,people:[]});save();selW(id);cm();toast(`${round}차 추가됨`);}
+
+// 인원 추가
+function openAddP(wid){
+  om(`<div class="mh"><h3>인원 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="sec">기본 정보</div>
+    <div class="fg">
+      <div class="fr"><label>활동명 (핸들)</label><input id="fh" placeholder="무아(muum_mooa)"></div>
+      <div class="fr"><label>실명 <span style="color:#52B788;font-size:10px">(발주서에 사용)</span></label><input id="frn" placeholder="홍길동"></div>
+    </div>
+    <div class="fg">
+      <div class="fr"><label>채널 URL</label><input id="fu" placeholder="https://www.instagram.com/..."></div>
+      <div class="fr"><label>팔로워</label><input id="ff" type="number" placeholder="26000"></div>
+    </div>
+    <div class="fr"><label>진행 유형</label><select id="ft">${typeOpts()}</select></div>
+    <div class="sec">제품</div>
+    <div class="fg">
+      <div class="fr"><label>제품 1</label><input id="fp1" placeholder="Glossy Mid Tangle Twist Bag_Mustard"></div>
+      <div class="fr"><label>제품 2 (선택)</label><input id="fp2"></div>
+    </div>
+    <div class="sec">연락/배송</div>
+    <div class="fg">
+      <div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div>
+      <div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서에 사용)</span></label><input id="fph" placeholder="010-0000-0000"></div>
+    </div>
+    <div class="fr"><label>배송지 주소</label><input id="fa" placeholder="서울시 강남구..."></div>
+    <div class="fr"><label>비고</label><input id="fn" placeholder="진행이력 등"></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddP('${wid}')">추가</button></div>`);
+}
+function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,product:g('fp1'),product2:g('fp2'),contact:g('fc'),phone:g('fph'),address:g('fa'),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+
+// 인원 수정
+function openEditP(wid,pid){
+  const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;
+  om(`<div class="mh"><h3>인원 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fg"><div class="fr"><label>활동명</label><input id="fh" value="${e(p.handle)}"></div><div class="fr"><label>실명 <span style="color:#52B788;font-size:10px">(발주서)</span></label><input id="frn" value="${e(p.realname||'')}"></div></div>
+    <div class="fg"><div class="fr"><label>채널 URL</label><input id="fu" value="${e(p.url)}"></div><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div></div>
+    <div class="fr"><label>진행 유형</label><select id="ft">${typeOpts(p.type)}</select></div>
+    <div class="fg"><div class="fr"><label>제품 1</label><input id="fp1" value="${e(p.product)}"></div><div class="fr"><label>제품 2</label><input id="fp2" value="${e(p.product2||'')}"></div></div>
+    <div class="fg"><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div><div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서)</span></label><input id="fph" value="${e(p.phone||'')}"></div></div>
+    <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
+    <div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditP('${wid}','${pid}')">저장</button></div>`);
+}
+function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.product=g('fp1');p.product2=g('fp2');p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+
+// 붙여넣기 입력
+let _parsed=[];
+function openPaste(wid){
+  const w=DB.weekly.find(x=>x.id===wid);
+  om(`<div class="mh"><h3>📋 붙여넣기 입력 — ${w.round}차</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.7">탭으로 구분된 형식으로 붙여넣으세요:<br>
+    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">활동명</code>
+    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">URL</code>
+    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">팔로워</code>
+    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">제품</code>
+    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">연락처</code></p>
+    <textarea id="paste-input" style="width:100%;height:130px;padding:10px 12px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;resize:vertical"
+      placeholder="-민하 (blossomh_)&#9;https://www.instagram.com/blossomh_/&#9;226,000&#9;Glossy Mid Tangle Twist Bag_Ivory&#9;DM" oninput="previewPaste()"></textarea>
+    <div id="paste-preview"></div>
+  </div>
+  <div class="mf">
+    <span id="paste-count" style="font-size:12px;color:#888;margin-right:auto;align-self:center"></span>
+    <button class="btn" onclick="cm()">취소</button>
+    <button class="btn pri" id="paste-save-btn" onclick="savePaste('${wid}')" disabled>저장</button>
+  </div>`);
+}
+function previewPaste(){
+  const raw=document.getElementById('paste-input').value.trim();
+  const preview=document.getElementById('paste-preview');
+  const countEl=document.getElementById('paste-count');
+  const saveBtn=document.getElementById('paste-save-btn');
+  if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsed=[];return;}
+  const lines=raw.split('\n').map(l=>l.trim()).filter(l=>l);
+  _parsed=[];
+  let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
+    <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
+      <div style="padding:6px 10px">활동명</div><div style="padding:6px 10px">URL</div><div style="padding:6px 10px">팔로워</div><div style="padding:6px 10px">제품</div><div style="padding:6px 10px">연락처</div>
+    </div>`;
+  lines.forEach(line=>{
+    let cols=line.split('\t');
+    if(cols.length<3) cols=line.split(/\s{2,}/);
+    const handle=(cols[0]||'').trim(),url=(cols[1]||'').trim();
+    const followers=parseInt((cols[2]||'').replace(/[,\s]/g,''))||0;
+    const product=(cols[3]||'').trim(),contact=(cols[4]||'').trim();
+    const address=(cols[5]||'').trim(),note=(cols[6]||'').trim();
+    const ok=handle&&product;
+    if(ok) _parsed.push({handle,url,followers,product,product2:'',contact,address,type:'시딩',note});
+    html+=`<div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;border-top:1px solid #e8e8e8;font-size:11px;${ok?'':'background:#fff5f5'}">
+      <div style="padding:6px 10px;${!handle?'color:#e00;font-weight:600':''}">${handle||'❌'}</div>
+      <div style="padding:6px 10px">${url.slice(0,24)||'-'}</div>
+      <div style="padding:6px 10px">${followers?followers.toLocaleString():'-'}</div>
+      <div style="padding:6px 10px;${!product?'color:#e00;font-weight:600':''}">${product||'❌'}</div>
+      <div style="padding:6px 10px">${contact||'-'}</div>
+    </div>`;
+  });
+  html+='</div>';
+  preview.innerHTML=html;
+  countEl.textContent=`${_parsed.length}명 인식됨`;
+  saveBtn.disabled=_parsed.length===0;
+}
+function savePaste(wid){
+  const w=DB.weekly.find(x=>x.id===wid);if(!w||!_parsed.length)return;
+  _parsed.forEach(px=>w.people.push({id:'p'+uid(),...px}));
+  save();renderSB();renderPage();cm();toast(`${_parsed.length}명 추가됨`);_parsed=[];
+}
+
+// 월간 추가
+function openAddM(){
+  om(`<div class="mh"><h3>새 월간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fg">
+    <div class="fr"><label>년월</label><input id="f1" type="month" value="${today().slice(0,7)}"></div>
+    <div class="fr"><label>메모</label><input id="f2" placeholder="뉴탱글 5월 배송 리스트"></div>
+  </div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddM()">생성</button></div>`);
+}
+function saveAddM(){const month=g('f1'),note=g('f2'),id='m'+uid();DB.monthly.push({id,month,note,weekIds:[]});save();selM(id);cm();toast('월간 생성됨');}
+
+function openLinkW(mid){
+  const m=DB.monthly.find(x=>x.id===mid);
+  const avail=DB.weekly.filter(w=>!m.weekIds.includes(w.id)).sort((a,b)=>a.round-b.round);
+  if(!avail.length){toast('연결 가능한 주간 리스트 없음');return;}
+  om(`<div class="mh"><h3>주간 리스트 연결</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fr"><label>연결할 주간 리스트</label>
+    <select id="f1">${avail.map(w=>`<option value="${w.id}">${w.round}차 (${w.date}) — ${w.people.length}명</option>`).join('')}</select>
+  </div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveLinkW('${mid}')">연결</button></div>`);
+}
+function saveLinkW(mid){DB.monthly.find(x=>x.id===mid).weekIds.push(g('f1'));save();renderSB();renderPage();cm();toast('연결됨');}
+
+// 캠페인 차수 추가
+function openAddCampRound(){
+  const existing=DB.campaigns.filter(c=>c.type===cur.campType);
+  const next=existing.length?Math.max(...existing.map(c=>c.round))+1:1;
+  om(`<div class="mh"><h3>${cur.campType==='릴스'?'🎬':'♻️'} 새 ${cur.campType} ${next}차</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fg">
+    <div class="fr"><label>차수</label><input id="f1" type="number" value="${next}" min="1"></div>
+    <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
+  </div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCampRound()">추가</button></div>`);
+}
+function saveAddCampRound(){
+  const type=cur.campType,round=parseInt(g('f1'))||1,date=g('f2'),id='c'+uid();
+  DB.campaigns.push({id,name:type+' 캠페인',type,round,date,people:[]});
+  save();selC(id);cm();toast(`${type} ${round}차 추가됨`);
+}
+
+// 새 캠페인 유형 추가
+function openNewCampType(){
+  om(`<div class="mh"><h3>새 캠페인 유형 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>유형 이름</label><input id="f1" placeholder="예: 유튜브 협찬, 브랜디드 콘텐츠 등"></div>
+    <div class="fg">
+      <div class="fr"><label>1차 날짜</label><input id="f2" type="date" value="${today()}"></div>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveNewCampType()">추가</button></div>`);
+}
+function saveNewCampType(){
+  const type=g('f1').trim();if(!type){alert('유형 이름 필수');return;}
+  const date=g('f2'),id='c'+uid();
+  DB.campaigns.push({id,name:type+' 캠페인',type,round:1,date,people:[]});
+  cur.campType=type;save();selC(id);cm();toast(`${type} 캠페인 추가됨`);
+}
+
+// 캠페인 인원 추가/수정
+function openAddCP(cid){
+  const c=DB.campaigns.find(x=>x.id===cid);if(!c)return;
+  const isReels=c.type==='릴스';
+  om(`<div class="mh"><h3>${c.name} ${c.round}차 — 인원 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fg"><div class="fr"><label>활동명</label><input id="fh" placeholder="전지혜(zee.hye)"></div><div class="fr"><label>채널 URL</label><input id="fu" placeholder="https://..."></div></div>
+    <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" placeholder="0"></div><div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div></div>
+    <div class="fr"><label>제품</label><input id="fp1" placeholder="제품명"></div>
+    <div class="fr"><label>배송지</label><input id="fa" placeholder="서울시..."></div>
+    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" placeholder="30만원"></div><div class="fr"><label>업로드일/특이사항</label><input id="fn" placeholder="5/15 업로드"></div></div>`
+    :`<div class="fr"><label>비고</label><input id="fn" placeholder=""></div><input id="fee" style="display:none">`}
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCP('${cid}')">추가</button></div>`);
+}
+function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),product:g('fp1'),address:g('fa'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+
+function openEditCP(cid,pid){
+  const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;
+  const c=DB.campaigns.find(x=>x.id===cid);const isReels=c?.type==='릴스';
+  om(`<div class="mh"><h3>인원 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fg"><div class="fr"><label>활동명</label><input id="fh" value="${e(p.handle)}"></div><div class="fr"><label>채널 URL</label><input id="fu" value="${e(p.url)}"></div></div>
+    <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div></div>
+    <div class="fr"><label>제품</label><input id="fp1" value="${e(p.product)}"></div>
+    <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
+    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" value="${e(p.fee||'')}"></div><div class="fr"><label>특이사항</label><input id="fn" value="${e(p.note||'')}"></div></div>`
+    :`<div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div><input id="fee" style="display:none" value="${e(p.fee||'')}">`}
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCP('${cid}','${pid}')">저장</button></div>`);
+}
+function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');p.product=g('fp1');p.address=g('fa');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+
+// ══════════════════════════════
+//  UPDATE / DELETE
+// ══════════════════════════════
+// 월 기준 상대 차수 계산 (표시용)
+function getMonthRound(wid){
+  const w=DB.weekly.find(x=>x.id===wid);if(!w)return w?.round;
+  const ym=w.date.slice(0,7);
+  const sameMonth=[...DB.weekly].filter(x=>x.date.slice(0,7)===ym).sort((a,b)=>a.round-b.round);
+  const idx=sameMonth.findIndex(x=>x.id===wid);
+  const mon=parseInt(ym.slice(5))+'월';
+  return `${mon} ${idx+1}차`;
+}
+
+function toggleShipped(wid,pid,checked){
+  const w=DB.weekly.find(x=>x.id===wid);if(!w)return;
+  const p=w.people.find(x=>x.id===pid);if(!p)return;
+  p.shipped=checked;
+  save();
+  renderSB();
+  renderPage();
+}
+function updWDate(wid,val){const w=DB.weekly.find(x=>x.id===wid);if(w){w.date=val;save();renderSB();toast('날짜 수정됨');}}
+function updWRound(wid,val){const w=DB.weekly.find(x=>x.id===wid);if(w){w.round=parseInt(val)||w.round;save();renderSB();renderPage();toast('차수 수정됨');}}
+function updMNote(mid,val){const m=DB.monthly.find(x=>x.id===mid);if(m){m.note=val;save();toast('메모 수정됨');}}
+function updCDate(cid,val){const c=DB.campaigns.find(x=>x.id===cid);if(c){c.date=val;save();renderSB();toast('날짜 수정됨');}}
+function updCRound(cid,val){const c=DB.campaigns.find(x=>x.id===cid);if(c){c.round=parseInt(val)||c.round;save();renderSB();renderPage();toast('차수 수정됨');}}
+
+function delW(id){if(!confirm('삭제?'))return;DB.weekly=DB.weekly.filter(w=>w.id!==id);DB.monthly.forEach(m=>{m.weekIds=m.weekIds.filter(x=>x!==id)});save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
+function delM(id){if(!confirm('삭제?'))return;DB.monthly=DB.monthly.filter(m=>m.id!==id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
+function delP(wid,pid){const w=DB.weekly.find(x=>x.id===wid);w.people=w.people.filter(p=>p.id!==pid);save();renderSB();renderPage();toast('삭제됨');}
+function delC(id){if(!confirm('삭제?'))return;DB.campaigns=DB.campaigns.filter(c=>c.id!==id);save();cur.id=null;renderSB();renderPage();toast('삭제됨');}
+function delCP(cid,pid){const c=DB.campaigns.find(x=>x.id===cid);c.people=c.people.filter(p=>p.id!==pid);save();renderPage();toast('삭제됨');}
+
+// ══════════════════════════════
+//  EXCEL EXPORT
+// ══════════════════════════════
+
+// ══════════════════════════════
+//  EXCEL EXPORT (API 기반)
+// ══════════════════════════════
+
+function expW(wid){
+  const w=DB.weekly.find(x=>x.id===wid);if(!w)return;
+  const wb=XLSX.utils.book_new();
+  const totalQty=w.people.reduce((a,p)=>a+(p.product2&&p.product2.trim()?2:1),0);
+  const rows=[
+    [`이번 주 시딩 리스트  |  ${w.date}  (${w.round}차)`,'','','','','','',''],
+    ['','','','','','','',''],
+    ['No. / 활동명','수취인','채널 URL','주소','컨택 포인트','제품 1','제품 2','수량']
+  ];
+  w.people.forEach(p=>{
+    const name=(p.realname||'').trim()||p.handle.split('(')[0].replace(/-/g,'').trim();
+    rows.push([p.handle,name,p.url||'',p.address||'',p.contact||'',p.product||'',p.product2||'-',p.product2&&p.product2.trim()?2:1]);
+  });
+  rows.push([`  총 ${w.people.length}명  |  발송 제품 ${totalQty}개`,'','','','','','',totalQty]);
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}},{s:{r:rows.length-1,c:0},e:{r:rows.length-1,c:6}}];
+  ws['!cols']=[{wch:16},{wch:12},{wch:38},{wch:46},{wch:30},{wch:34},{wch:18},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,ws,'주간시딩리스트');
+  XLSX.writeFile(wb,`주간_시딩_리스트_${w.round}차.xlsx`);
+  toast('주간 엑셀 다운로드 완료');
+}
+
+function expM(mid){
+  const m=DB.monthly.find(x=>x.id===mid);if(!m)return;
+  const lbl=m.month.slice(0,4)+'년 '+parseInt(m.month.slice(5))+'월';
+  const linked=DB.weekly.filter(w=>m.weekIds.includes(w.id)).sort((a,b)=>a.round-b.round);
+  const total=linked.reduce((a,w)=>a+w.people.length,0);
+  const wb=XLSX.utils.book_new();
+  const rows=[
+    [`${lbl} 배송 리스트  |  ${m.note}`,'','','','','','',''],
+    ['','','','','','','',''],
+    ['ID','주력 채널 계정','구독자/팔로워','제안상품','컨택포인트','진행유형','진행이력','비고']
+  ];
+  const merges=[{s:{r:0,c:0},e:{r:0,c:7}}];
+  let r=3;
+  linked.forEach(w=>{
+    rows.push([`  ▸ ${w.round}차 (${w.date})  —  ${w.people.length}명`,'','','','','','','']);
+    merges.push({s:{r,c:0},e:{r,c:7}});
+    r++;
+    w.people.forEach(p=>{
+      rows.push([p.handle,p.url||'',p.followers||'',p.product||'',p.contact||'',p.type||'',p.note||'','']);
+      r++;
+    });
+  });
+  rows.push([`  총 ${total}명`,'','','','','','','']);
+  merges.push({s:{r,c:0},e:{r,c:7}});
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges']=merges;
+  ws['!cols']=[{wch:32},{wch:44},{wch:14},{wch:38},{wch:28},{wch:14},{wch:36},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,lbl);
+  XLSX.writeFile(wb,`월간_시딩_리스트_${m.month}.xlsx`);
+  toast('월간 엑셀 다운로드 완료');
+}
+
+function expOrder(wid){
+  const w=DB.weekly.find(x=>x.id===wid);
+  const targets=w.people.filter(p=>p.address&&p.address.trim());
+  if(!targets.length){alert('배송지가 입력된 인원이 없습니다.');return;}
+  const wb=XLSX.utils.book_new();
+  const rows=[['수취인명','바코드','수취인주소(1)','수취인전화번호1','수취인전화번호2','수량','배송비(상품)','배송결제(신용,착불)','상품명(확정)','옵션(확정)','품번코드(사방넷)','배송메세지']];
+  targets.forEach(p=>{
+    const name=(p.realname||'').trim()||p.handle.split('(')[0].replace(/[-\s]/g,'').trim();
+    const phone=(p.phone||'').trim()||(p.contact&&p.contact.includes('-')?p.contact:'');
+    rows.push([name,'',p.address,phone,phone,1,'','',p.product||'','','','']);
+    if(p.product2&&p.product2.trim()) rows.push([name,'',p.address,phone,phone,1,'','',p.product2,'','','']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:8},{wch:44},{wch:16},{wch:16},{wch:6},{wch:10},{wch:16},{wch:50},{wch:10},{wch:14},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'발주서');
+  XLSX.writeFile(wb,`로젠_발주서_${w.round}차_${w.date}.xlsx`);
+  toast(`발주서 완성 (${targets.length}명)`);
+}
+
+function expC(cid){
+  const c=DB.campaigns.find(x=>x.id===cid);if(!c)return;
+  const wb=XLSX.utils.book_new();
+  const isReels=c.type==='릴스';
+  const rows=[
+    [`${c.name} ${c.round}차  |  ${c.date}`,'','','','','','',''],
+    ['','','','','','','',''],
+    isReels?['#','활동명','채널 URL','팔로워','제품','컨택포인트','배송지','비용','특이사항']:
+            ['#','활동명','채널 URL','팔로워','제품','컨택포인트','배송지','비고']
+  ];
+  c.people.forEach((p,i)=>rows.push(
+    isReels?[i+1,p.handle,p.url||'',p.followers||'',p.product||'',p.contact||'',p.address||'',p.fee||'',p.note||'']:
+            [i+1,p.handle,p.url||'',p.followers||'',p.product||'',p.contact||'',p.address||'',p.note||'']
+  ));
+  const fee=isReels?c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0):0;
+  rows.push([`  총 ${c.people.length}명${isReels?' · 합계 '+fee+'만원':''}` ,'','','','','','','']);
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=isReels?[{wch:4},{wch:20},{wch:36},{wch:10},{wch:36},{wch:28},{wch:36},{wch:10},{wch:28}]:
+                      [{wch:4},{wch:20},{wch:36},{wch:10},{wch:36},{wch:28},{wch:36},{wch:28}];
+  XLSX.utils.book_append_sheet(wb,ws,c.name+c.round+'차');
+  XLSX.writeFile(wb,`${c.name}_${c.round}차.xlsx`);
+  toast('엑셀 다운로드 완료');
+}
+
+function expHistory(){
+  const map={};
+  DB.weekly.forEach(w=>w.people.forEach(p=>{
+    const k=normH(p.handle);
+    if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};
+    map[k].seedings.push({round:w.round,product:p.product});
+  }));
+  DB.campaigns.forEach(c=>c.people.forEach(p=>{
+    const k=normH(p.handle);
+    if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};
+    map[k].camps.push({name:c.name,type:c.type,round:c.round,product:p.product,fee:p.fee});
+  }));
+  const entries=Object.values(map).sort((a,b)=>(b.camps.length>0?1:0)-(a.camps.length>0?1:0));
+  const wb=XLSX.utils.book_new();
+  const rows1=[['인물별 시딩·캠페인 진행 이력','','','','','','',''],['','','','','','','',''],
+    ['#','활동명','팔로워','상태','시딩 차수','시딩 제품','캠페인','비용']];
+  entries.forEach((x,i)=>rows1.push([i+1,x.handle,x.followers||'',
+    x.camps.length>0&&x.seedings.length>0?'시딩+캠페인':x.camps.length>0?'캠페인만':'시딩',
+    x.seedings.map(s=>s.monthRound||s.round+'차').join(', ')||'-',
+    [...new Set(x.seedings.map(s=>s.product).filter(Boolean))].join(' / ')||'-',
+    x.camps.map(c=>c.name+' '+c.round+'차').join(', ')||'-',
+    x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-']));
+  const ws1=XLSX.utils.aoa_to_sheet(rows1);
+  ws1['!cols']=[{wch:4},{wch:20},{wch:10},{wch:12},{wch:14},{wch:36},{wch:24},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws1,'인물별 진행이력');
+  const dual=entries.filter(x=>x.camps.length>0&&x.seedings.length>0);
+  const rows2=[['시딩 → 캠페인 전환 인원','','','',''],['','','','',''],['활동명','팔로워','시딩 차수','캠페인','비용']];
+  dual.forEach(x=>rows2.push([x.handle,x.followers||'',x.seedings.map(s=>s.round+'차').join(', '),x.camps.map(c=>c.name+' '+c.round+'차').join(', '),x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-']));
+  const ws2=XLSX.utils.aoa_to_sheet(rows2);
+  ws2['!cols']=[{wch:20},{wch:10},{wch:14},{wch:24},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws2,'시딩→캠페인 전환');
+  XLSX.writeFile(wb,`시딩_캠페인_진행이력_${today()}.xlsx`);
+  toast('통합 엑셀 다운로드 완료');
+}
+
+
+// ══════════════════════════════
+//  백업 / 복원
+// ══════════════════════════════
+function backupData(){
+  const data=JSON.stringify(DB,null,2);
+  const blob=new Blob([data],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const date=new Date().toISOString().slice(0,10);
+  a.href=url;
+  a.download=`시딩매니저_백업_${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('백업 파일 저장 완료 💾');
+}
+
+function restoreData(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      // 유효성 확인
+      if(!data.weekly||!data.monthly||!data.campaigns){
+        alert('올바른 백업 파일이 아닙니다.');return;
+      }
+      if(!confirm(`백업 파일을 불러올까요?\n현재 데이터는 백업 데이터로 교체됩니다.\n\n주간: ${data.weekly.length}차 / 캠페인: ${data.campaigns.length}개`))return;
+      DB=data;
+      save();
+      cur={tab:'dash',campType:'릴스',id:null};
+      renderSB();
+      pgDash();
+      toast('백업 데이터 복원 완료 ✅');
+    }catch(err){
+      alert('파일을 읽는 중 오류가 발생했습니다.');
+    }
+  };
+  reader.readAsText(file);
+  input.value=''; // 같은 파일 다시 선택 가능하도록 초기화
+}
+
+// ══════════════════════════════
+//  INIT
+// ══════════════════════════════
+function resetData(){
+  if(!confirm('⚠️ 모든 데이터를 기본값(엑셀 원본)으로 초기화할까요?\n직접 추가/수정한 내용은 모두 사라집니다.')) return;
+  try{localStorage.removeItem('sdmgr14');}catch(e){}
+  seed();
+
+  cur={tab:'dash',campType:'릴스',id:null};
+  renderSB();
+  pgDash();
+  toast('데이터 초기화 완료 ✅');
+}
+
+// Firebase 모듈에서 초기화 처리
+</script>
+<!-- Firebase 실시간 DB 연동 -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBGH-8P0Fh2LajoYUSizWKU8ZVyozi3Mo4",
+  authDomain: "seeding-manager-fc674.firebaseapp.com",
+  projectId: "seeding-manager-fc674",
+  storageBucket: "seeding-manager-fc674.firebasestorage.app",
+  messagingSenderId: "591887881245",
+  appId: "1:591887881245:web:3b55f8ae0325ee6e2322f4",
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const fsDB = getFirestore(fbApp);
+const DB_DOC = doc(fsDB, "seeding", "main");
+
+// 저장 함수 전역 등록
+window._fbSave = async function() {
+  try {
+    await setDoc(DB_DOC, JSON.parse(JSON.stringify(window.DB)));
+  } catch(e) {
+    console.error('저장 실패:', e);
+  }
+};
+
+// 로드
+try {
+  const snap = await getDoc(DB_DOC);
+  if (snap.exists()) {
+    const data = snap.data();
+    if (data.weekly && data.weekly.length > 0) {
+      window.DB = data;
+    } else {
+      // Firebase에 데이터 없으면 원본 seed 데이터를 Firebase에 저장
+      window.seed();
+      await window._fbSave();
+    }
+  } else {
+    // 문서 없으면 seed 데이터 업로드
+    window.seed();
+    await window._fbSave();
+  }
+} catch(e) {
+  console.warn('Firebase 연결 실패, 로컬 데이터 사용:', e);
+  try {
+    const s = localStorage.getItem('sdmgr14');
+    if (s) window.DB = JSON.parse(s);
+    else window.seed();
+  } catch(e2) { window.seed(); }
+}
+
+window.renderSB();
+window.pgDash();
+
+// 실시간 동기화 - 다른 사람이 수정하면 자동 반영
+let isLocalUpdate = false;
+const origSave = window._fbSave;
+window._fbSave = async function() {
+  isLocalUpdate = true;
+  await origSave();
+  setTimeout(() => isLocalUpdate = false, 1000);
+};
+
+onSnapshot(DB_DOC, (snap) => {
+  if (isLocalUpdate) return;
+  if (snap.exists()) {
+    const data = snap.data();
+    if (data.weekly) {
+      window.DB = data;
+      window.renderSB();
+      window.renderPage();
+    }
+  }
+});
+</script>
+</body>
+</html>

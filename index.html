@@ -234,8 +234,8 @@ const supa = {
 };
 
 async function loadDB(){
+  showLoading();
   try{
-    showLoading();
     const [weekly, monthly, campaigns] = await Promise.all([
       supa.get('weekly'),
       supa.get('monthly'),
@@ -245,25 +245,22 @@ async function loadDB(){
       DB.weekly = weekly.map(w=>({...w, weekIds:w.week_ids||[], people:w.people||[]}));
       DB.monthly = monthly.map(m=>({...m, weekIds:m.week_ids||[], people:m.people||[]}));
       DB.campaigns = campaigns.map(c=>({...c, people:c.people||[]}));
-      hideLoading();
-      renderSB();
-      pgDash();
-      return;
+    } else {
+      // DB 비어있으면 seed 후 자동 저장
+      seed();
+      await saveAll();
     }
-    // DB 비어있으면 seed 후 저장
-    seed();
-    await saveAll();
-    hideLoading();
-    renderSB();
-    pgDash();
   }catch(e){
-    console.log('Supabase 오류, 로컬 사용:', e);
+    // Supabase 실패시 로컬 사용
     try{const s=localStorage.getItem('sdmgr14');if(s)DB=JSON.parse(s);}catch(e2){}
-    if(!DB.weekly.length) seed();
-    hideLoading();
-    renderSB();
-    pgDash();
+    if(!DB.weekly.length){
+      seed();
+      saveAll().catch(()=>{});
+    }
   }
+  hideLoading();
+  renderSB();
+  pgDash();
 }
 
 async function save(){

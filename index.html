@@ -196,20 +196,17 @@ tbody tr:hover td{background:#f8fbf8}
 // ══════════════════════════════
 //  DATA
 // ══════════════════════════════
-let DB={weekly:[],monthly:[],campaigns:[]};
-let cur={tab:'dash',campType:'릴스',id:null};
+var DB={weekly:[],monthly:[],campaigns:[]};
+var cur={tab:'dash',campType:'릴스',id:null};
 let _uid=100;
 const uid=()=>'x'+(++_uid);
 
 // ══════════════════════════════
 //  DATA LOAD / SAVE
 // ══════════════════════════════
-function loadDB(){
-  // Firebase 모듈에서 처리
-}
+function loadDB(){ /* Firebase 모듈에서 처리 */ }
 function save(){
   if(window._fbSave) window._fbSave();
-  else { try{localStorage.setItem('sdmgr14',JSON.stringify(DB));}catch(e){} }
 }
 
 
@@ -1285,7 +1282,7 @@ function resetData(){
 
 // Firebase 모듈에서 초기화 처리
 </script>
-<!-- Firebase 실시간 DB 연동 -->
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -1303,22 +1300,24 @@ const fbApp = initializeApp(firebaseConfig);
 const fsDB = getFirestore(fbApp);
 const DB_DOC = doc(fsDB, "seeding", "main");
 
-// 저장 함수 전역 등록
-function cleanForFirestore(obj) {
-  if (Array.isArray(obj)) return obj.map(cleanForFirestore);
-  if (obj !== null && typeof obj === 'object') {
-    const out = {};
+// undefined/null 제거
+function clean(obj) {
+  if (Array.isArray(obj)) return obj.map(clean);
+  if (obj && typeof obj === 'object') {
+    const o = {};
     for (const k of Object.keys(obj)) {
       const v = obj[k];
-      out[k] = (v === undefined || v === null) ? '' : cleanForFirestore(v);
+      if (v !== undefined && v !== null) o[k] = clean(v);
+      else o[k] = '';
     }
-    return out;
+    return o;
   }
-  return obj;
+  return obj ?? '';
 }
+
 window._fbSave = async function() {
   try {
-    await setDoc(DB_DOC, cleanForFirestore(window.DB));
+    await setDoc(DB_DOC, clean(DB));
   } catch(e) {
     console.error('저장 실패:', e);
   }
@@ -1330,49 +1329,50 @@ try {
   if (snap.exists()) {
     const data = snap.data();
     if (data.weekly && data.weekly.length > 0) {
-      window.DB = data;
+      DB.weekly = data.weekly;
+      DB.monthly = data.monthly;
+      DB.campaigns = data.campaigns;
     } else {
-      // Firebase에 데이터 없으면 원본 seed 데이터를 Firebase에 저장
-      window.seed();
+      seed();
       await window._fbSave();
     }
   } else {
-    // 문서 없으면 seed 데이터 업로드
-    window.seed();
+    seed();
     await window._fbSave();
   }
 } catch(e) {
-  console.warn('Firebase 연결 실패, 로컬 데이터 사용:', e);
-  try {
-    const s = localStorage.getItem('sdmgr14');
-    if (s) window.DB = JSON.parse(s);
-    else window.seed();
-  } catch(e2) { window.seed(); }
+  console.warn('Firebase 연결 실패:', e);
+  seed();
 }
 
-window.renderSB();
-window.pgDash();
+renderSB();
+pgDash();
 
-// 실시간 동기화 - 다른 사람이 수정하면 자동 반영
-let isLocalUpdate = false;
-const origSave = window._fbSave;
+// 실시간 동기화
+let saving = false;
+const orig = window._fbSave;
 window._fbSave = async function() {
-  isLocalUpdate = true;
-  await origSave();
-  setTimeout(() => isLocalUpdate = false, 1000);
+  saving = true;
+  await orig();
+  setTimeout(() => saving = false, 2000);
 };
 
 onSnapshot(DB_DOC, (snap) => {
-  if (isLocalUpdate) return;
+  if (saving) return;
   if (snap.exists()) {
     const data = snap.data();
     if (data.weekly) {
-      window.DB = data;
-      window.renderSB();
-      window.renderPage();
+      DB.weekly = data.weekly;
+      DB.monthly = data.monthly;
+      DB.campaigns = data.campaigns;
+      renderSB();
+      renderPage();
     }
   }
 });
+</script>
+</body>
+</html>
 </script>
 </body>
 </html>

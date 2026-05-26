@@ -213,7 +213,7 @@ function save(){
 
 const mkW=(id,round,date,people)=>({id,round,date,people});
 const mkC=(id,name,type,round,date,people)=>({id,name,type,round,date,people});
-const pp=(handle,url,followers,product,product2,contact,address,type,note)=>({id:'p'+uid(),handle,url,followers,product,product2,contact,address,type,note});
+const pp=(handle,url,followers,product,product2,contact,address,type,note)=>({id:'p'+uid(),handle,url,followers,products:[product,product2].filter(x=>x&&x.trim()),contact,address,type,note});
 const cp=(handle,url,followers,product,contact,address,fee,note)=>({id:'cp'+uid(),handle,url,followers,product,contact,address,fee,note});
 
 function seed(){
@@ -583,8 +583,8 @@ function pgWeekly(){
   <div class="tw">
     <div class="tw-h"><h3>${getMonthRound(w.id)} 주간 시딩 리스트</h3><span class="sub">${w.date} · 총 ${w.people.length}명 · 배송완료 ${w.people.filter(p=>p.shipped).length}명</span></div>
     <div class="tsc"><table>
-      <thead><tr><th>#</th><th>배송 상태</th><th>활동명</th><th>캠페인</th><th>채널 URL</th><th>팔로워</th><th>제품 1</th><th>제품 2</th><th>컨택 포인트</th><th>전화번호</th><th>배송지</th><th>유형</th><th>비고</th><th></th></tr></thead>
-      <tbody>${w.people.length===0?`<tr><td colspan="14" class="nodata">인원 추가 또는 📋 붙여넣기를 이용하세요</td></tr>`:
+      <thead><tr><th>#</th><th>배송 상태</th><th>활동명</th><th>캠페인</th><th>채널 URL</th><th>팔로워</th><th>제품</th><th>컨택 포인트</th><th>전화번호</th><th>배송지</th><th>유형</th><th>비고</th><th></th></tr></thead>
+      <tbody>${w.people.length===0?`<tr><td colspan="13" class="nodata">인원 추가 또는 📋 붙여넣기를 이용하세요</td></tr>`:
         w.people.map((p,i)=>{
           const badges=campBadges(p.handle);
           const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)));
@@ -606,8 +606,7 @@ function pgWeekly(){
             <td style="min-width:150px">${badges||'<span style="font-size:10px;color:#ccc">—</span>'}${dropdown}</td>
             <td>${p.url?`<a href="${e(p.url)}" target="_blank">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
             <td>${p.followers?p.followers.toLocaleString():'-'}</td>
-            <td style="max-width:150px;font-size:11px">${e(p.product)}</td>
-            <td style="max-width:120px;font-size:11px;color:#999">${p.product2?e(p.product2):'-'}</td>
+            <td style="max-width:150px;font-size:11px">${(p.products||[p.product,p.product2].filter(Boolean)).map(x=>`<div>${e(x)}</div>`).join('')||'-'}</td>
             <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
             <td style="font-size:11px;color:#666">${p.phone?e(p.phone):'<span style="color:#ddd">—</span>'}</td>
             <td style="font-size:11px;color:#888;max-width:130px">${p.address?e(p.address):'<span style="color:#ddd">—</span>'}</td>
@@ -681,7 +680,7 @@ function pgMonthly(){
         <td style="min-width:120px">${cb||`<span style="font-size:10px;color:#ccc">—</span>`}</td>
         <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
         <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
-        <td style="font-size:11px">${e(p.product)}${p.product2?`<br><span style="color:#bbb">${e(p.product2)}</span>`:''}</td>
+        <td style="font-size:11px">${(p.products||[p.product,p.product2].filter(Boolean)).map(x=>e(x)).join('<br>')||'-'}</td>
         <td><span class="tag ${isDM(p.contact)?'t-dm':'t-em'}">${e(p.contact)||'-'}</span></td>
         <td style="font-size:11px;color:#888">${p.address?e(p.address):'-'}</td>
         <td><span class="tag t-ty">${e(p.type)||'-'}</span></td>
@@ -792,7 +791,7 @@ function pgHistory(){
       style="padding:6px 11px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;width:180px" oninput="pgHistory()">
      <button class="btn suc" onclick="expHistory()">⬇ 통합 엑셀</button>`;
   const map={};
-  DB.weekly.forEach(w=>w.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].seedings.push({round:w.round,date:w.date,product:p.product,monthRound:getMonthRound(w.id)});}));
+  DB.weekly.forEach(w=>w.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].seedings.push({round:w.round,date:w.date,products:p.products||(p.product?[p.product]:[]),monthRound:getMonthRound(w.id)});}));
   DB.campaigns.forEach(c=>c.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].camps.push({name:c.name,type:c.type,round:c.round,product:p.product,fee:p.fee,note:p.note});}));
   const search=(document.getElementById('hist-search')?.value||prevSearch).trim().toLowerCase();
   let entries=Object.values(map).filter(x=>!search||normH(x.handle).includes(search.replace(/\s/g,'')));
@@ -820,7 +819,7 @@ function pgHistory(){
           <td style="font-size:11px">${x.followers?x.followers.toLocaleString():'-'}</td>
           <td>${statusBadge(x)}</td>
           <td style="font-size:11px;color:var(--g2);font-weight:600">${x.seedings.map(s=>s.monthRound||s.round+'차').join(', ')||'-'}</td>
-          <td style="font-size:11px;max-width:140px">${[...new Set(x.seedings.map(s=>s.product).filter(Boolean))].join('<br>')||'-'}</td>
+          <td style="font-size:11px;max-width:140px">${[...new Set(x.seedings.flatMap(s=>s.products||(s.product?[s.product]:[])).filter(Boolean))].join('<br>')||'-'}</td>
           <td style="font-size:11px">${x.camps.map(c=>`<span style="font-size:10px;padding:1px 6px;border-radius:4px;${c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':'background:#EEF2FF;color:#3730A3'}">${c.name} ${c.round}차</span>`).join(' ')||'-'}</td>
           <td style="font-size:11px;max-width:140px">${[...new Set(x.camps.map(c=>c.product).filter(Boolean))].join('<br>')||'-'}</td>
           <td style="font-size:11px">${x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-'}</td>
@@ -864,10 +863,10 @@ function openAddP(wid){
     </div>
     <div class="fr"><label>진행 유형</label><select id="ft">${typeOpts()}</select></div>
     <div class="sec">제품</div>
-    <div class="fg">
-      <div class="fr"><label>제품 1</label><input id="fp1" placeholder="Glossy Mid Tangle Twist Bag_Mustard"></div>
-      <div class="fr"><label>제품 2 (선택)</label><input id="fp2"></div>
+    <div id="prod-list">
+      <div class="fg prod-row"><div class="fr" style="flex:1"><label>제품 1</label><input class="prod-input" placeholder="Glossy Mid Tangle Twist Bag_Mustard"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button></div>
     </div>
+    <button type="button" class="btn sm" onclick="addProdField()" style="margin-top:4px">+ 제품 추가</button>
     <div class="sec">연락/배송</div>
     <div class="fg">
       <div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div>
@@ -878,7 +877,9 @@ function openAddP(wid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddP('${wid}')">추가</button></div>`);
 }
-function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,product:g('fp1'),product2:g('fp2'),contact:g('fc'),phone:g('fph'),address:g('fa'),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function addProdField(){const list=document.getElementById('prod-list');const idx=list.querySelectorAll('.prod-row').length+1;const row=document.createElement('div');row.className='fg prod-row';row.innerHTML=`<div class="fr" style="flex:1"><label>제품 ${idx}</label><input class="prod-input" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button>`;list.appendChild(row);}
+function getProducts(){return [...document.querySelectorAll('.prod-input')].map(x=>x.value.trim()).filter(Boolean);}
+function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,products:getProducts(),contact:g('fc'),phone:g('fph'),address:g('fa'),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 // 인원 수정
 function openEditP(wid,pid){
@@ -888,14 +889,18 @@ function openEditP(wid,pid){
     <div class="fg"><div class="fr"><label>활동명</label><input id="fh" value="${e(p.handle)}"></div><div class="fr"><label>실명 <span style="color:#52B788;font-size:10px">(발주서)</span></label><input id="frn" value="${e(p.realname||'')}"></div></div>
     <div class="fg"><div class="fr"><label>채널 URL</label><input id="fu" value="${e(p.url)}"></div><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div></div>
     <div class="fr"><label>진행 유형</label><select id="ft">${typeOpts(p.type)}</select></div>
-    <div class="fg"><div class="fr"><label>제품 1</label><input id="fp1" value="${e(p.product)}"></div><div class="fr"><label>제품 2</label><input id="fp2" value="${e(p.product2||'')}"></div></div>
+    <div class="sec">제품</div>
+    <div id="prod-list">
+      ${(p.products||[p.product,p.product2].filter(Boolean)||['']).map((prd,i)=>`<div class="fg prod-row"><div class="fr" style="flex:1"><label>제품 ${i+1}</label><input class="prod-input" value="${e(prd)}"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button></div>`).join('')}
+    </div>
+    <button type="button" class="btn sm" onclick="addProdField()" style="margin-top:4px">+ 제품 추가</button>
     <div class="fg"><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div><div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서)</span></label><input id="fph" value="${e(p.phone||'')}"></div></div>
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
     <div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditP('${wid}','${pid}')">저장</button></div>`);
 }
-function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.product=g('fp1');p.product2=g('fp2');p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.products=getProducts();p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // 붙여넣기 입력
 let _parsed=[];
@@ -1094,15 +1099,16 @@ function delCP(cid,pid){const c=DB.campaigns.find(x=>x.id===cid);c.people=c.peop
 function expW(wid){
   const w=DB.weekly.find(x=>x.id===wid);if(!w)return;
   const wb=XLSX.utils.book_new();
-  const totalQty=w.people.reduce((a,p)=>a+(p.product2&&p.product2.trim()?2:1),0);
+  const totalQty=w.people.reduce((a,p)=>a+(p.products||[p.product,p.product2].filter(Boolean)).length,0);
   const rows=[
     [`이번 주 시딩 리스트  |  ${w.date}  (${w.round}차)`,'','','','','','',''],
     ['','','','','','','',''],
-    ['No. / 활동명','수취인','채널 URL','주소','컨택 포인트','제품 1','제품 2','수량']
+    ['No. / 활동명','수취인','채널 URL','주소','컨택 포인트','제품','수량','']
   ];
   w.people.forEach(p=>{
     const name=(p.realname||'').trim()||p.handle.split('(')[0].replace(/-/g,'').trim();
-    rows.push([p.handle,name,p.url||'',p.address||'',p.contact||'',p.product||'',p.product2||'-',p.product2&&p.product2.trim()?2:1]);
+    const prods=(p.products||[p.product,p.product2].filter(Boolean));
+    rows.push([p.handle,name,p.url||'',p.address||'',p.contact||'',prods.join(' / '),prods.length,'']);
   });
   rows.push([`  총 ${w.people.length}명  |  발송 제품 ${totalQty}개`,'','','','','','',totalQty]);
   const ws=XLSX.utils.aoa_to_sheet(rows);
@@ -1131,7 +1137,7 @@ function expM(mid){
     merges.push({s:{r,c:0},e:{r,c:7}});
     r++;
     w.people.forEach(p=>{
-      rows.push([p.handle,p.url||'',p.followers||'',p.product||'',p.contact||'',p.type||'',p.note||'','']);
+      rows.push([p.handle,p.url||'',p.followers||'',(p.products||[p.product,p.product2].filter(Boolean)).join(' / ')||'',p.contact||'',p.type||'',p.note||'','']);
       r++;
     });
   });
@@ -1154,8 +1160,11 @@ function expOrder(wid){
   targets.forEach(p=>{
     const name=(p.realname||'').trim()||p.handle.split('(')[0].replace(/[-\s]/g,'').trim();
     const phone=(p.phone||'').trim()||(p.contact&&p.contact.includes('-')?p.contact:'');
-    rows.push([name,'',p.address,phone,phone,1,'','',p.product||'','','','']);
-    if(p.product2&&p.product2.trim()) rows.push([name,'',p.address,phone,phone,1,'','',p.product2,'','','']);
+    const prods=(p.products||[p.product,p.product2].filter(Boolean));
+    prods.forEach(prod=>{
+      rows.push([name,'',p.address,phone,phone,1,'','',prod,'','','']);
+    });
+    if(!prods.length) rows.push([name,'',p.address,phone,phone,1,'','',p.product||'','','','']);
   });
   const ws=XLSX.utils.aoa_to_sheet(rows);
   ws['!cols']=[{wch:10},{wch:8},{wch:44},{wch:16},{wch:16},{wch:6},{wch:10},{wch:16},{wch:50},{wch:10},{wch:14},{wch:20}];
@@ -1175,8 +1184,8 @@ function expC(cid){
             ['#','활동명','채널 URL','팔로워','제품','컨택포인트','배송지','비고']
   ];
   c.people.forEach((p,i)=>rows.push(
-    isReels?[i+1,p.handle,p.url||'',p.followers||'',p.product||'',p.contact||'',p.address||'',p.fee||'',p.note||'']:
-            [i+1,p.handle,p.url||'',p.followers||'',p.product||'',p.contact||'',p.address||'',p.note||'']
+    isReels?[i+1,p.handle,p.url||'',p.followers||'',(p.products||(p.product?[p.product]:[])).join(' / ')||'',p.contact||'',p.address||'',p.fee||'',p.note||'']:
+            [i+1,p.handle,p.url||'',p.followers||'',(p.products||(p.product?[p.product]:[])).join(' / ')||'',p.contact||'',p.address||'',p.note||'']
   ));
   const fee=isReels?c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0):0;
   rows.push([`  총 ${c.people.length}명${isReels?' · 합계 '+fee+'만원':''}` ,'','','','','','','']);
@@ -1193,7 +1202,7 @@ function expHistory(){
   DB.weekly.forEach(w=>w.people.forEach(p=>{
     const k=normH(p.handle);
     if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};
-    map[k].seedings.push({round:w.round,product:p.product});
+    map[k].seedings.push({round:w.round,products:p.products||(p.product?[p.product]:[])});
   }));
   DB.campaigns.forEach(c=>c.people.forEach(p=>{
     const k=normH(p.handle);
@@ -1207,7 +1216,7 @@ function expHistory(){
   entries.forEach((x,i)=>rows1.push([i+1,x.handle,x.followers||'',
     x.camps.length>0&&x.seedings.length>0?'시딩+캠페인':x.camps.length>0?'캠페인만':'시딩',
     x.seedings.map(s=>s.monthRound||s.round+'차').join(', ')||'-',
-    [...new Set(x.seedings.map(s=>s.product).filter(Boolean))].join(' / ')||'-',
+    [...new Set(x.seedings.flatMap(s=>s.products||(s.product?[s.product]:[])).filter(Boolean))].join(' / ')||'-',
     x.camps.map(c=>c.name+' '+c.round+'차').join(', ')||'-',
     x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-']));
   const ws1=XLSX.utils.aoa_to_sheet(rows1);

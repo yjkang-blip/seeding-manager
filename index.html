@@ -199,7 +199,7 @@ tbody tr:hover td{background:#f8fbf8}
 var DB={weekly:[],monthly:[],campaigns:[]};
 var cur={tab:'dash',campType:'릴스',id:null};
 let _uid=100;
-const uid=()=>'x'+(++_uid);
+const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
 
 // ══════════════════════════════
 //  DATA LOAD / SAVE

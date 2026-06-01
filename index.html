@@ -429,7 +429,23 @@ function renderSB(){
     if(!DB.exposure||DB.exposure.length===0){
       el.innerHTML=`<div class="sb-empty">보고서를 추가하세요</div>`;return;
     }
-    h=DB.exposure.map(r=>`<button class="sbi${cur.id===r.id?' on':''}" onclick="cur.id='${r.id}';renderSB();renderPage()">${r.title}</button>`).join('');
+    const grouped={};
+    DB.exposure.forEach(r=>{
+      const month=r.dateStart?r.dateStart.slice(0,7):(r.date?r.date.slice(0,7):'기타');
+      if(!grouped[month]) grouped[month]=[];
+      grouped[month].push(r);
+    });
+    h=Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).map(month=>{
+      const label=month.includes('-')?`${parseInt(month.split('-')[1])}월`:month;
+      const items=grouped[month].map(r=>{
+        const dateLabel=r.dateStart&&r.dateEnd?`${r.dateStart.slice(5).replace('-','/')} ~ ${r.dateEnd.slice(5).replace('-','/')}`:r.date||'';
+        return `<button class="sbi${cur.id===r.id?' on':''}" onclick="cur.id='${r.id}';renderSB();renderPage()">
+          <span style="display:block;font-weight:600">${e(r.title)}</span>
+          <span style="display:block;font-size:10px;opacity:.7;margin-top:1px">${dateLabel}</span>
+        </button>`;
+      }).join('');
+      return `<div class="sb-tt" style="color:#fff;opacity:.5">${label}</div>${items}`;
+    }).join('');
     el.innerHTML=h;return;
   }
   if(t==='weekly'){
@@ -857,7 +873,7 @@ function pgExposure(){
       ${DB.exposure.map(r=>`
         <div onclick="cur.id='${r.id}';renderSB();renderPage()" style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;cursor:pointer;transition:.15s" onmouseover="this.style.borderColor='#52B788'" onmouseout="this.style.borderColor='#e8e8e8'">
           <div style="font-weight:700;font-size:14px;margin-bottom:6px">${e(r.title)}</div>
-          <div style="font-size:11px;color:#888">${r.date||''}</div>
+          <div style="font-size:11px;color:#888">${r.dateStart&&r.dateEnd?`${r.dateStart} ~ ${r.dateEnd}`:r.date||''}</div>
           <div style="font-size:11px;color:#aaa;margin-top:4px">${r.sections?r.sections.length:0}개 섹션</div>
         </div>`).join('')}
     </div>`}`;
@@ -868,7 +884,7 @@ function pgExposure(){
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
     <button class="btn" onclick="cur.id=null;renderPage()">← 목록</button>
     <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">${e(rep.title)}</h2>
-    <span style="font-size:12px;color:#aaa">${rep.date||''}</span>
+    <span style="font-size:12px;color:#aaa">${rep.dateStart&&rep.dateEnd?`${rep.dateStart} ~ ${rep.dateEnd}`:rep.date||''}</span>
     <button class="btn" onclick="openEditExposureTitle('${rep.id}')">제목 수정</button>
     <button class="btn" style="color:#e00" onclick="delExposure('${rep.id}')">삭제</button>
   </div>
@@ -891,8 +907,11 @@ function pgExposure(){
 function openAddExposure(){
   om(`<div class="mh"><h3>보고서 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
-    <div class="fr"><label>제목 (예: 5월 4주차 노출 보고)</label><input id="exp-title" placeholder="5월 4주차 노출 보고"></div>
-    <div class="fr"><label>날짜</label><input id="exp-date" type="date" value="${today()}"></div>
+    <div class="fr"><label>제목 (예: 5월 1주차 노출 보고)</label><input id="exp-title" placeholder="5월 1주차 노출 보고"></div>
+    <div class="fg">
+      <div class="fr"><label>시작일</label><input id="exp-date-start" type="date" value="${today()}"></div>
+      <div class="fr"><label>종료일</label><input id="exp-date-end" type="date" value="${today()}"></div>
+    </div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddExposure()">추가</button></div>`);
 }
@@ -900,7 +919,8 @@ function saveAddExposure(){
   if(!DB.exposure) DB.exposure=[];
   const title=g('exp-title');if(!title){alert('제목 입력');return;}
   const id='exp'+uid();
-  DB.exposure.push({id,title,date:g('exp-date'),sections:[]});
+  const dateStart=g('exp-date-start'), dateEnd=g('exp-date-end');
+  DB.exposure.push({id,title,dateStart,dateEnd,sections:[]});
   save();cur.id=id;renderSB();renderPage();cm();toast('보고서 추가됨');
 }
 function delExposure(id){
@@ -911,12 +931,21 @@ function delExposure(id){
 function openEditExposureTitle(id){
   const rep=DB.exposure.find(r=>r.id===id);
   om(`<div class="mh"><h3>제목 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
-  <div class="mb"><div class="fr"><label>제목</label><input id="exp-title" value="${e(rep.title)}"></div></div>
+  <div class="mb">
+    <div class="fr"><label>제목</label><input id="exp-title" value="${e(rep.title)}"></div>
+    <div class="fg">
+      <div class="fr"><label>시작일</label><input id="exp-date-start" type="date" value="${rep.dateStart||rep.date||''}"></div>
+      <div class="fr"><label>종료일</label><input id="exp-date-end" type="date" value="${rep.dateEnd||rep.date||''}"></div>
+    </div>
+  </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveExpTitle('${id}')">저장</button></div>`);
 }
 function saveExpTitle(id){
   const rep=DB.exposure.find(r=>r.id===id);
-  rep.title=g('exp-title');save();renderSB();renderPage();cm();toast('수정됨');
+  rep.title=g('exp-title');
+  rep.dateStart=g('exp-date-start');
+  rep.dateEnd=g('exp-date-end');
+  save();renderSB();renderPage();cm();toast('수정됨');
 }
 function addExpSection(repId){
   om(`<div class="mh"><h3>섹션 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>

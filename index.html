@@ -181,6 +181,7 @@ tbody tr:hover td{background:#f8fbf8}
       <button class="mt"    onclick="mainTab('weekly')">주간 리스트</button>
       <button class="mt"    onclick="mainTab('monthly')">월간 통합</button>
       <button class="mt"    onclick="mainTab('campaign')">캠페인</button>
+      <button class="mt"    onclick="mainTab('exposure')">📣 노출 보고</button>
       <div class="nav-sep"></div>
       <button class="mt hist" onclick="mainTab('history')">📊 진행이력</button>
       <div class="nav-act" id="nav-act"></div>
@@ -196,7 +197,7 @@ tbody tr:hover td{background:#f8fbf8}
 // ══════════════════════════════
 //  DATA
 // ══════════════════════════════
-var DB={weekly:[],monthly:[],campaigns:[]};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[]};
 var cur={tab:'dash',campType:'릴스',id:null};
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
@@ -405,7 +406,7 @@ function addToCamp(handle,campId){
 function mainTab(tab){
   if(cur.tab!==tab) cur.id=null;
   cur.tab=tab;
-  document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',['dash','weekly','monthly','campaign','history'][i]===tab));
+  document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',['dash','weekly','monthly','campaign','exposure','history'][i]===tab));
   document.getElementById('nav-act').innerHTML='';
   renderSB();
   renderPage();
@@ -423,6 +424,13 @@ function renderSB(){
   let h='';
   if(t==='dash'||t==='history'){
     el.innerHTML=`<div class="sb-empty">위 탭을 눌러<br>목록을 확인하세요</div>`;return;
+  }
+  if(t==='exposure'){
+    if(!DB.exposure||DB.exposure.length===0){
+      el.innerHTML=`<div class="sb-empty">보고서를 추가하세요</div>`;return;
+    }
+    h=DB.exposure.map(r=>`<button class="sbi${cur.id===r.id?' on':''}" onclick="cur.id='${r.id}';renderSB();renderPage()">${r.title}</button>`).join('');
+    el.innerHTML=h;return;
   }
   if(t==='weekly'){
     // 월별로 그룹핑
@@ -492,6 +500,7 @@ function renderPage(){
   else if(t==='monthly') pgMonthly();
   else if(t==='campaign') pgCampaign();
   else if(t==='history') pgHistory();
+  else if(t==='exposure') pgExposure();
 }
 
 // ── 대시보드 ──
@@ -827,6 +836,117 @@ function pgHistory(){
       </tbody>
     </table></div>
   </div>`;
+}
+
+// ══════════════════════════════
+//  노출 보고
+// ══════════════════════════════
+function pgExposure(){
+  if(!DB.exposure) DB.exposure=[];
+  const pg=document.getElementById('page');
+  const rep=DB.exposure.find(r=>r.id===cur.id);
+
+  if(!rep){
+    pg.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">📣 노출 보고</h2>
+      <button class="btn pri" onclick="openAddExposure()">+ 보고서 추가</button>
+    </div>
+    ${DB.exposure.length===0?`<div class="nodata" style="margin-top:60px">보고서를 추가해주세요</div>`:
+    `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+      ${DB.exposure.map(r=>`
+        <div onclick="cur.id='${r.id}';renderSB();renderPage()" style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;cursor:pointer;transition:.15s" onmouseover="this.style.borderColor='#52B788'" onmouseout="this.style.borderColor='#e8e8e8'">
+          <div style="font-weight:700;font-size:14px;margin-bottom:6px">${e(r.title)}</div>
+          <div style="font-size:11px;color:#888">${r.date||''}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:4px">${r.sections?r.sections.length:0}개 섹션</div>
+        </div>`).join('')}
+    </div>`}`;
+    return;
+  }
+
+  pg.innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+    <button class="btn" onclick="cur.id=null;renderPage()">← 목록</button>
+    <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">${e(rep.title)}</h2>
+    <span style="font-size:12px;color:#aaa">${rep.date||''}</span>
+    <button class="btn" onclick="openEditExposureTitle('${rep.id}')">제목 수정</button>
+    <button class="btn" style="color:#e00" onclick="delExposure('${rep.id}')">삭제</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:start" id="exp-sections">
+    ${(rep.sections||[]).map((s,i)=>`
+    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
+      <div style="background:#f5faf7;padding:10px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #e8e8e8">
+        <span style="font-size:12px;font-weight:700;color:#1D4E3A;flex:1;text-transform:uppercase;letter-spacing:.05em">${e(s.title)}</span>
+        <button class="btn sm" onclick="editExpSection('${rep.id}',${i})" style="font-size:11px;padding:2px 7px">수정</button>
+        <button class="btn sm" onclick="delExpSection('${rep.id}',${i})" style="font-size:11px;padding:2px 7px;color:#e00">✕</button>
+      </div>
+      <div style="padding:12px">
+        <textarea style="width:100%;min-height:100px;border:1px solid #e8e8e8;border-radius:6px;padding:8px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.7;box-sizing:border-box" onblur="saveExpSection('${rep.id}',${i},this.value)">${e(s.content||'')}</textarea>
+      </div>
+    </div>`).join('')}
+    <div onclick="addExpSection('${rep.id}')" style="background:#f9f9f9;border:1.5px dashed #cce5d8;border-radius:10px;padding:30px;text-align:center;cursor:pointer;color:#52B788;font-size:13px;font-weight:600" onmouseover="this.style.background='#f0faf4'" onmouseout="this.style.background='#f9f9f9'">+ 섹션 추가</div>
+  </div>`;
+}
+
+function openAddExposure(){
+  om(`<div class="mh"><h3>보고서 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>제목 (예: 5월 4주차 노출 보고)</label><input id="exp-title" placeholder="5월 4주차 노출 보고"></div>
+    <div class="fr"><label>날짜</label><input id="exp-date" type="date" value="${today()}"></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddExposure()">추가</button></div>`);
+}
+function saveAddExposure(){
+  if(!DB.exposure) DB.exposure=[];
+  const title=g('exp-title');if(!title){alert('제목 입력');return;}
+  const id='exp'+uid();
+  DB.exposure.push({id,title,date:g('exp-date'),sections:[]});
+  save();cur.id=id;renderSB();renderPage();cm();toast('보고서 추가됨');
+}
+function delExposure(id){
+  if(!confirm('보고서를 삭제할까요?')) return;
+  DB.exposure=DB.exposure.filter(r=>r.id!==id);
+  cur.id=null;save();renderSB();renderPage();toast('삭제됨');
+}
+function openEditExposureTitle(id){
+  const rep=DB.exposure.find(r=>r.id===id);
+  om(`<div class="mh"><h3>제목 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fr"><label>제목</label><input id="exp-title" value="${e(rep.title)}"></div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveExpTitle('${id}')">저장</button></div>`);
+}
+function saveExpTitle(id){
+  const rep=DB.exposure.find(r=>r.id===id);
+  rep.title=g('exp-title');save();renderSB();renderPage();cm();toast('수정됨');
+}
+function addExpSection(repId){
+  om(`<div class="mh"><h3>섹션 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fr"><label>섹션 이름 (예: 릴스 노출, 유튜브, 매거진 등)</label><input id="sec-title" placeholder="릴스 노출"></div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddExpSection('${repId}')">추가</button></div>`);
+}
+function saveAddExpSection(repId){
+  const rep=DB.exposure.find(r=>r.id===repId);
+  const title=g('sec-title');if(!title){alert('섹션 이름 입력');return;}
+  rep.sections.push({title,content:''});
+  save();renderPage();cm();toast('섹션 추가됨');
+}
+function editExpSection(repId,idx){
+  const rep=DB.exposure.find(r=>r.id===repId);
+  om(`<div class="mh"><h3>섹션명 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb"><div class="fr"><label>섹션 이름</label><input id="sec-title" value="${e(rep.sections[idx].title)}"></div></div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditExpSection('${repId}',${idx})">저장</button></div>`);
+}
+function saveEditExpSection(repId,idx){
+  const rep=DB.exposure.find(r=>r.id===repId);
+  rep.sections[idx].title=g('sec-title');save();renderPage();cm();toast('수정됨');
+}
+function delExpSection(repId,idx){
+  if(!confirm('섹션을 삭제할까요?')) return;
+  const rep=DB.exposure.find(r=>r.id===repId);
+  rep.sections.splice(idx,1);save();renderPage();toast('삭제됨');
+}
+function saveExpSection(repId,idx,val){
+  const rep=DB.exposure.find(r=>r.id===repId);
+  if(rep&&rep.sections[idx]) {rep.sections[idx].content=val;save();}
 }
 
 // ══════════════════════════════
@@ -1341,6 +1461,7 @@ try {
       DB.weekly = data.weekly;
       DB.monthly = data.monthly;
       DB.campaigns = data.campaigns;
+      DB.exposure = data.exposure || [];
     } else {
       seed();
       await window._fbSave();
@@ -1374,14 +1495,12 @@ onSnapshot(DB_DOC, (snap) => {
       DB.weekly = data.weekly;
       DB.monthly = data.monthly;
       DB.campaigns = data.campaigns;
+      DB.exposure = data.exposure || [];
       renderSB();
       renderPage();
     }
   }
 });
-</script>
-</body>
-</html>
 </script>
 </body>
 </html>

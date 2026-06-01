@@ -899,8 +899,8 @@ function pgExposure(){
     <div style="display:flex;flex-direction:column;gap:8px">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">✏️ 입력</div>
       <div style="font-size:11px;color:#aaa;line-height:1.6;padding:6px 10px;background:#f9f9f9;border-radius:6px">
-        <b style="color:#52B788">-제목</b> → 초록 섹션 헤더<br>
-        <b style="color:#888">•항목</b> 또는 <b style="color:#888"> 항목</b> → 들여쓰기 항목<br>
+        <b style="color:#52B788">-제목</b> → 초록 섹션 헤더&nbsp;&nbsp;
+        <b style="color:#888">>항목</b> → • 하위 항목&nbsp;&nbsp;
         일반 텍스트 → 그냥 텍스트
       </div>
       <textarea id="exp-editor" style="flex:1;width:100%;border:1px solid #e8e8e8;border-radius:10px;padding:14px;font-size:13px;font-family:inherit;resize:none;line-height:1.8;box-sizing:border-box;outline:none" oninput="renderExpPreview()" onfocus="this.style.borderColor='#52B788'" onblur="this.style.borderColor='#e8e8e8'">${e(rep.content||'')}</textarea>
@@ -966,9 +966,9 @@ function renderExpText(text){
       const title=line.trim().slice(1).trim();
       return `<div style="margin-top:16px;margin-bottom:6px;padding:6px 12px;background:#f0faf4;border-left:3px solid #52B788;border-radius:0 6px 6px 0;font-weight:700;color:#1D4E3A;font-size:13px">${e(title)}</div>`;
     }
-    // •나 공백+• 로 시작 = 하위 항목
-    if(/^\s*[•·*]/.test(line)||/^\s{2,}/.test(line)){
-      const content=line.trim().replace(/^[•·*]\s*/,'');
+    // > 로 시작 = 하위 항목
+    if(/^\s*>/.test(line)){
+      const content=line.trim().replace(/^>\s*/,'');
       return `<div style="padding:2px 12px 2px 24px;color:#444;font-size:12px;display:flex;gap:6px"><span style="color:#52B788;flex-shrink:0">•</span><span>${e(content)}</span></div>`;
     }
     // 일반 항목

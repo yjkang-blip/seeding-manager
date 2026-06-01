@@ -885,23 +885,32 @@ function pgExposure(){
     <button class="btn" onclick="cur.id=null;renderPage()">← 목록</button>
     <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">${e(rep.title)}</h2>
     <span style="font-size:12px;color:#aaa">${rep.dateStart&&rep.dateEnd?`${rep.dateStart} ~ ${rep.dateEnd}`:rep.date||''}</span>
-    <button class="btn" onclick="openEditExposureTitle('${rep.id}')">제목 수정</button>
+    <button class="btn" onclick="openEditExposureTitle('${rep.id}')">수정</button>
     <button class="btn" style="color:#e00" onclick="delExposure('${rep.id}')">삭제</button>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:start" id="exp-sections">
-    ${(rep.sections||[]).map((s,i)=>`
-    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
-      <div style="background:#f5faf7;padding:10px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #e8e8e8">
-        <span style="font-size:12px;font-weight:700;color:#1D4E3A;flex:1;text-transform:uppercase;letter-spacing:.05em">${e(s.title)}</span>
-        <button class="btn sm" onclick="editExpSection('${rep.id}',${i})" style="font-size:11px;padding:2px 7px">수정</button>
-        <button class="btn sm" onclick="delExpSection('${rep.id}',${i})" style="font-size:11px;padding:2px 7px;color:#e00">✕</button>
-      </div>
-      <div style="padding:12px">
-        <textarea style="width:100%;min-height:100px;border:1px solid #e8e8e8;border-radius:6px;padding:8px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.7;box-sizing:border-box" onblur="saveExpSection('${rep.id}',${i},this.value)">${e(s.content||'')}</textarea>
-      </div>
-    </div>`).join('')}
-    <div onclick="addExpSection('${rep.id}')" style="background:#f9f9f9;border:1.5px dashed #cce5d8;border-radius:10px;padding:30px;text-align:center;cursor:pointer;color:#52B788;font-size:13px;font-weight:600" onmouseover="this.style.background='#f0faf4'" onmouseout="this.style.background='#f9f9f9'">+ 섹션 추가</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;height:calc(100vh - 160px)">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">✏️ 입력</div>
+      <textarea id="exp-editor" style="flex:1;width:100%;border:1px solid #e8e8e8;border-radius:10px;padding:14px;font-size:13px;font-family:inherit;resize:none;line-height:1.8;box-sizing:border-box;outline:none" placeholder="자유롭게 입력하세요.
+
+예시)
+-파급력있었던 노출건
+이상미님_글라탱 애쉬핑크 (릴스): 조회수 29.5만, 좋아요 1350개
+
+-릴스 협업
+손희재님_도트 : 조회수 2.9만, 좋아요 76개
+
+-업데이트 예정
+은하님 스몰탱글_레드 배송 후 날짜 협의 예정" oninput="renderExpPreview()">${e(rep.content||'')}</textarea>
+      <button class="btn pri" onclick="saveExpContent('${rep.id}')" style="width:100%">저장</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">👁 미리보기</div>
+      <div id="exp-preview" style="flex:1;background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:14px;overflow-y:auto;font-size:13px;line-height:1.8">${renderExpText(rep.content||'')}</div>
+    </div>
   </div>`;
+  document.getElementById('exp-editor').addEventListener('focus',function(){this.style.borderColor='#52B788';});
+  document.getElementById('exp-editor').addEventListener('blur',function(){this.style.borderColor='#e8e8e8';});
 }
 
 function openAddExposure(){
@@ -947,35 +956,29 @@ function saveExpTitle(id){
   rep.dateEnd=g('exp-date-end');
   save();renderSB();renderPage();cm();toast('수정됨');
 }
-function addExpSection(repId){
-  om(`<div class="mh"><h3>섹션 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
-  <div class="mb"><div class="fr"><label>섹션 이름 (예: 릴스 노출, 유튜브, 매거진 등)</label><input id="sec-title" placeholder="릴스 노출"></div></div>
-  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddExpSection('${repId}')">추가</button></div>`);
+function renderExpText(text){
+  if(!text) return '<span style="color:#bbb">내용을 입력하면 여기에 보여요</span>';
+  return text.split('\n').map(line=>{
+    if(!line.trim()) return '<div style="height:8px"></div>';
+    // -로 시작하는 줄 = 섹션 헤더
+    if(line.trim().startsWith('-')&&line.trim().length>1&&!/^\s*-\s/.test(line)){
+      const title=line.trim().slice(1).trim();
+      return `<div style="margin-top:16px;margin-bottom:6px;padding:6px 12px;background:#f0faf4;border-left:3px solid #52B788;border-radius:0 6px 6px 0;font-weight:700;color:#1D4E3A;font-size:13px">${e(title)}</div>`;
+    }
+    // 일반 항목
+    return `<div style="padding:2px 12px;color:#333;font-size:13px">${e(line)}</div>`;
+  }).join('');
 }
-function saveAddExpSection(repId){
-  const rep=DB.exposure.find(r=>r.id===repId);
-  const title=g('sec-title');if(!title){alert('섹션 이름 입력');return;}
-  rep.sections.push({title,content:''});
-  save();renderPage();cm();toast('섹션 추가됨');
+function renderExpPreview(){
+  const val=document.getElementById('exp-editor')?.value||'';
+  const preview=document.getElementById('exp-preview');
+  if(preview) preview.innerHTML=renderExpText(val);
 }
-function editExpSection(repId,idx){
+function saveExpContent(repId){
   const rep=DB.exposure.find(r=>r.id===repId);
-  om(`<div class="mh"><h3>섹션명 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
-  <div class="mb"><div class="fr"><label>섹션 이름</label><input id="sec-title" value="${e(rep.sections[idx].title)}"></div></div>
-  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditExpSection('${repId}',${idx})">저장</button></div>`);
-}
-function saveEditExpSection(repId,idx){
-  const rep=DB.exposure.find(r=>r.id===repId);
-  rep.sections[idx].title=g('sec-title');save();renderPage();cm();toast('수정됨');
-}
-function delExpSection(repId,idx){
-  if(!confirm('섹션을 삭제할까요?')) return;
-  const rep=DB.exposure.find(r=>r.id===repId);
-  rep.sections.splice(idx,1);save();renderPage();toast('삭제됨');
-}
-function saveExpSection(repId,idx,val){
-  const rep=DB.exposure.find(r=>r.id===repId);
-  if(rep&&rep.sections[idx]) {rep.sections[idx].content=val;save();}
+  const val=document.getElementById('exp-editor')?.value||'';
+  rep.content=val;
+  save();toast('저장됨 ✅');
 }
 
 // ══════════════════════════════

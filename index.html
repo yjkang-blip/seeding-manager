@@ -880,37 +880,38 @@ function pgExposure(){
     return;
   }
 
+  const isEditing=cur.expEditing===rep.id;
   pg.innerHTML=`
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-    <button class="btn" onclick="cur.id=null;renderPage()">← 목록</button>
+    <button class="btn" onclick="cur.id=null;cur.expEditing=null;renderPage()">← 목록</button>
     <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">${e(rep.title)}</h2>
     <span style="font-size:12px;color:#aaa">${rep.dateStart&&rep.dateEnd?`${rep.dateStart} ~ ${rep.dateEnd}`:rep.date||''}</span>
-    <button class="btn" onclick="openEditExposureTitle('${rep.id}')">수정</button>
+    ${isEditing
+      ?`<button class="btn pri" onclick="saveExpContent('${rep.id}')">저장</button>
+         <button class="btn" onclick="cur.expEditing=null;renderPage()">취소</button>`
+      :`<button class="btn" onclick="cur.expEditing='${rep.id}';renderPage()">✏️ 수정</button>`
+    }
+    <button class="btn" onclick="openEditExposureTitle('${rep.id}')">제목</button>
     <button class="btn" style="color:#e00" onclick="delExposure('${rep.id}')">삭제</button>
   </div>
+  ${isEditing?`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;height:calc(100vh - 160px)">
     <div style="display:flex;flex-direction:column;gap:8px">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">✏️ 입력</div>
-      <textarea id="exp-editor" style="flex:1;width:100%;border:1px solid #e8e8e8;border-radius:10px;padding:14px;font-size:13px;font-family:inherit;resize:none;line-height:1.8;box-sizing:border-box;outline:none" placeholder="자유롭게 입력하세요.
-
-예시)
--파급력있었던 노출건
-이상미님_글라탱 애쉬핑크 (릴스): 조회수 29.5만, 좋아요 1350개
-
--릴스 협업
-손희재님_도트 : 조회수 2.9만, 좋아요 76개
-
--업데이트 예정
-은하님 스몰탱글_레드 배송 후 날짜 협의 예정" oninput="renderExpPreview()">${e(rep.content||'')}</textarea>
-      <button class="btn pri" onclick="saveExpContent('${rep.id}')" style="width:100%">저장</button>
+      <div style="font-size:11px;color:#aaa;line-height:1.6;padding:6px 10px;background:#f9f9f9;border-radius:6px">
+        <b style="color:#52B788">-제목</b> → 초록 섹션 헤더<br>
+        <b style="color:#888">•항목</b> 또는 <b style="color:#888"> 항목</b> → 들여쓰기 항목<br>
+        일반 텍스트 → 그냥 텍스트
+      </div>
+      <textarea id="exp-editor" style="flex:1;width:100%;border:1px solid #e8e8e8;border-radius:10px;padding:14px;font-size:13px;font-family:inherit;resize:none;line-height:1.8;box-sizing:border-box;outline:none" oninput="renderExpPreview()" onfocus="this.style.borderColor='#52B788'" onblur="this.style.borderColor='#e8e8e8'">${e(rep.content||'')}</textarea>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
       <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.05em">👁 미리보기</div>
-      <div id="exp-preview" style="flex:1;background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:14px;overflow-y:auto;font-size:13px;line-height:1.8">${renderExpText(rep.content||'')}</div>
+      <div id="exp-preview" style="flex:1;background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:14px;overflow-y:auto">${renderExpText(rep.content||'')}</div>
     </div>
-  </div>`;
-  document.getElementById('exp-editor').addEventListener('focus',function(){this.style.borderColor='#52B788';});
-  document.getElementById('exp-editor').addEventListener('blur',function(){this.style.borderColor='#e8e8e8';});
+  </div>`
+  :`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:20px;min-height:300px">${renderExpText(rep.content||'')}</div>`
+  }`;
 }
 
 function openAddExposure(){
@@ -960,10 +961,15 @@ function renderExpText(text){
   if(!text) return '<span style="color:#bbb">내용을 입력하면 여기에 보여요</span>';
   return text.split('\n').map(line=>{
     if(!line.trim()) return '<div style="height:8px"></div>';
-    // -로 시작하는 줄 = 섹션 헤더
-    if(line.trim().startsWith('-')&&line.trim().length>1&&!/^\s*-\s/.test(line)){
+    // -로 시작 = 섹션 헤더
+    if(/^-[^-\s]/.test(line.trim())){
       const title=line.trim().slice(1).trim();
       return `<div style="margin-top:16px;margin-bottom:6px;padding:6px 12px;background:#f0faf4;border-left:3px solid #52B788;border-radius:0 6px 6px 0;font-weight:700;color:#1D4E3A;font-size:13px">${e(title)}</div>`;
+    }
+    // •나 공백+• 로 시작 = 하위 항목
+    if(/^\s*[•·*]/.test(line)||/^\s{2,}/.test(line)){
+      const content=line.trim().replace(/^[•·*]\s*/,'');
+      return `<div style="padding:2px 12px 2px 24px;color:#444;font-size:12px;display:flex;gap:6px"><span style="color:#52B788;flex-shrink:0">•</span><span>${e(content)}</span></div>`;
     }
     // 일반 항목
     return `<div style="padding:2px 12px;color:#333;font-size:13px">${e(line)}</div>`;
@@ -978,7 +984,8 @@ function saveExpContent(repId){
   const rep=DB.exposure.find(r=>r.id===repId);
   const val=document.getElementById('exp-editor')?.value||'';
   rep.content=val;
-  save();toast('저장됨 ✅');
+  cur.expEditing=null;
+  save();renderPage();toast('저장됨 ✅');
 }
 
 // ══════════════════════════════

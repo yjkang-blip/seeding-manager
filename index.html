@@ -773,6 +773,7 @@ function pgCampaign(){
   document.getElementById('nav-act').innerHTML=
     `<div class="dw"><span>날짜</span><input type="date" value="${c.date}" onchange="updCDate('${c.id}',this.value)"></div>
      <button class="btn pri" onclick="openAddCP('${c.id}')">＋ 인원 추가</button>
+     <button class="btn" onclick="openPasteCP('${c.id}')">📋 붙여넣기</button>
      <button class="btn suc" onclick="expC('${c.id}')">⬇ 엑셀</button>
      <button class="btn dan ico" onclick="delC('${c.id}')">✕</button>`;
   document.getElementById('page').innerHTML=`${subHtml}
@@ -1089,27 +1090,39 @@ function previewPaste(){
   const countEl=document.getElementById('paste-count');
   const saveBtn=document.getElementById('paste-save-btn');
   if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsed=[];return;}
-  const lines=raw.split('\n').map(l=>l.trim()).filter(l=>l);
+  // 탭이 있는 줄 기준으로 행 분리 (셀 안의 줄바꿈 처리)
+  const rows=[];
+  let cur_row='';
+  raw.split('\n').forEach(line=>{
+    if(line.includes('\t')){
+      if(cur_row) rows.push(cur_row);
+      cur_row=line;
+    } else {
+      // 탭 없는 줄 = 이전 셀의 줄바꿈이거나 새 줄
+      cur_row = cur_row ? cur_row+' '+line.trim() : line;
+    }
+  });
+  if(cur_row) rows.push(cur_row);
   _parsed=[];
   let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
     <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
       <div style="padding:6px 10px">활동명</div><div style="padding:6px 10px">URL</div><div style="padding:6px 10px">팔로워</div><div style="padding:6px 10px">제품</div><div style="padding:6px 10px">연락처</div>
     </div>`;
-  lines.forEach(line=>{
+  rows.forEach((line,i)=>{
     let cols=line.split('\t');
-    if(cols.length<3) cols=line.split(/\s{2,}/);
-    const handle=(cols[0]||'').trim(),url=(cols[1]||'').trim();
+    if(cols.length<2) cols=line.split(/\s{2,}/);
+    const handle=(cols[0]||'').trim().replace(/\s+/g,' '),url=(cols[1]||'').trim();
     const followers=parseInt((cols[2]||'').replace(/[,\s]/g,''))||0;
     const product=(cols[3]||'').trim(),contact=(cols[4]||'').trim();
     const address=(cols[5]||'').trim(),note=(cols[6]||'').trim();
-    const ok=!!handle;
-    if(ok) _parsed.push({handle,url,followers,products:product?[product]:[],contact,address,type:'시딩',note});
-    html+=`<div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;border-top:1px solid #e8e8e8;font-size:11px;${ok?'':'background:#fff5f5'}">
-      <div style="padding:6px 10px;${!handle?'color:#e00;font-weight:600':''}">${handle||'❌'}</div>
-      <div style="padding:6px 10px">${url.slice(0,24)||'-'}</div>
-      <div style="padding:6px 10px">${followers?followers.toLocaleString():'-'}</div>
-      <div style="padding:6px 10px;${!product?'color:#e00;font-weight:600':''}">${product||'❌'}</div>
-      <div style="padding:6px 10px">${contact||'-'}</div>
+    _parsed.push({handle,url,followers,products:product?[product]:[],contact,address,type:'시딩',note});
+    const inp=(id,val,ph='')=>`<input data-row="${i}" data-field="${id}" value="${val.replace(/"/g,'&quot;')}" placeholder="${ph}" style="width:100%;border:none;border-radius:4px;padding:4px 6px;font-size:11px;font-family:inherit;background:transparent" oninput="updateParsed(${i},'${id}',this.value)" onfocus="this.style.background='#f0faf4'" onblur="this.style.background='transparent'">`;
+    html+=`<div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;border-top:1px solid #e8e8e8;align-items:center">
+      <div style="padding:4px 6px">${inp('handle',handle,'활동명')}</div>
+      <div style="padding:4px 6px">${inp('url',url,'URL')}</div>
+      <div style="padding:4px 6px">${inp('followers',followers?String(followers):'','팔로워')}</div>
+      <div style="padding:4px 6px">${inp('product',product,'제품')}</div>
+      <div style="padding:4px 6px">${inp('contact',contact,'연락처')}</div>
     </div>`;
   });
   html+='</div>';
@@ -1117,13 +1130,89 @@ function previewPaste(){
   countEl.textContent=`${_parsed.length}명 인식됨`;
   saveBtn.disabled=_parsed.length===0;
 }
+function updateParsed(i,field,val){
+  if(!_parsed[i]) return;
+  if(field==='followers') _parsed[i].followers=parseInt(val.replace(/[,\s]/g,''))||0;
+  else if(field==='product') _parsed[i].products=val.trim()?[val.trim()]:[];
+  else _parsed[i][field]=val.trim();
+}
 function savePaste(wid){
   const w=DB.weekly.find(x=>x.id===wid);if(!w||!_parsed.length)return;
   _parsed.forEach(px=>w.people.push({id:'p'+uid(),...px}));
   save();renderSB();renderPage();cm();toast(`${_parsed.length}명 추가됨`);_parsed=[];
 }
 
-// 월간 추가
+let _parsedC=[];
+function openPasteCP(cid){
+  const c=DB.campaigns.find(x=>x.id===cid);
+  om(`<div class="mh"><h3>${c.name} ${c.round}차 — 붙여넣기</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.7">엑셀에서 복사한 내용을 붙여넣으세요:<br>
+    <b>활동명 · URL · 팔로워 · 제품 · 연락처 · 주소</b> 순서 (탭 구분)</p>
+    <textarea id="paste-input-c" style="width:100%;height:130px;padding:10px 12px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;resize:vertical"
+      oninput="parsePasteC()" placeholder="엑셀에서 복사 후 붙여넣기"></textarea>
+    <div id="paste-preview-c"></div>
+  </div>
+  <div class="mf">
+    <span id="paste-count-c" style="font-size:12px;color:#888;margin-right:auto;align-self:center"></span>
+    <button class="btn" onclick="cm()">취소</button>
+    <button class="btn pri" id="paste-save-btn-c" onclick="savePasteC('${cid}')" disabled>저장</button>
+  </div>`);
+}
+function parsePasteC(){
+  const raw=document.getElementById('paste-input-c').value.trim();
+  const preview=document.getElementById('paste-preview-c');
+  const countEl=document.getElementById('paste-count-c');
+  const saveBtn=document.getElementById('paste-save-btn-c');
+  if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsedC=[];return;}
+  const rows=[];
+  let cur_row='';
+  raw.split('\n').forEach(line=>{
+    if(line.includes('\t')){
+      if(cur_row) rows.push(cur_row);
+      cur_row=line;
+    } else {
+      cur_row=cur_row?cur_row+' '+line.trim():line;
+    }
+  });
+  if(cur_row) rows.push(cur_row);
+  _parsedC=[];
+  let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
+    <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
+      <div style="padding:6px 10px">활동명</div><div style="padding:6px 10px">URL</div><div style="padding:6px 10px">팔로워</div><div style="padding:6px 10px">제품</div><div style="padding:6px 10px">연락처</div>
+    </div>`;
+  rows.forEach((line,i)=>{
+    let cols=line.split('\t');
+    if(cols.length<2) cols=line.split(/\s{2,}/);
+    const handle=(cols[0]||'').trim().replace(/\s+/g,' '),url=(cols[1]||'').trim();
+    const followers=parseInt((cols[2]||'').replace(/[,\s]/g,''))||0;
+    const product=(cols[3]||'').trim(),contact=(cols[4]||'').trim();
+    const address=(cols[5]||'').trim(),note=(cols[6]||'').trim();
+    _parsedC.push({handle,url,followers,product,contact,address,note});
+    const inp=(id,val,ph='')=>`<input data-row="${i}" value="${val.replace(/"/g,'&quot;')}" placeholder="${ph}" style="width:100%;border:none;border-radius:4px;padding:4px 6px;font-size:11px;font-family:inherit;background:transparent" oninput="updateParsedC(${i},'${id}',this.value)" onfocus="this.style.background='#f0faf4'" onblur="this.style.background='transparent'">`;
+    html+=`<div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;border-top:1px solid #e8e8e8;align-items:center">
+      <div style="padding:4px 6px">${inp('handle',handle,'활동명')}</div>
+      <div style="padding:4px 6px">${inp('url',url,'URL')}</div>
+      <div style="padding:4px 6px">${inp('followers',followers?String(followers):'','팔로워')}</div>
+      <div style="padding:4px 6px">${inp('product',product,'제품')}</div>
+      <div style="padding:4px 6px">${inp('contact',contact,'연락처')}</div>
+    </div>`;
+  });
+  html+='</div>';
+  preview.innerHTML=html;
+  countEl.textContent=`${_parsedC.length}명 인식됨`;
+  saveBtn.disabled=_parsedC.length===0;
+}
+function updateParsedC(i,field,val){
+  if(!_parsedC[i]) return;
+  if(field==='followers') _parsedC[i].followers=parseInt(val.replace(/[,\s]/g,''))||0;
+  else _parsedC[i][field]=val.trim();
+}
+function savePasteC(cid){
+  const c=DB.campaigns.find(x=>x.id===cid);if(!c||!_parsedC.length)return;
+  _parsedC.forEach(px=>c.people.push({id:'cp'+uid(),...px}));
+  save();renderSB();renderPage();cm();toast(`${_parsedC.length}명 추가됨`);_parsedC=[];
+}
 function openAddM(){
   om(`<div class="mh"><h3>새 월간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb"><div class="fg">

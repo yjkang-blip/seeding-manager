@@ -600,6 +600,7 @@ function pgWeekly(){
     `<div class="dw"><span>날짜</span><input type="date" value="${w.date}" onchange="updWDate('${w.id}',this.value)"></div>
      <button class="btn pri" onclick="openAddP('${w.id}')">＋ 인원 추가</button>
      <button class="btn" onclick="openPaste('${w.id}')">📋 붙여넣기</button>
+     <button class="btn" onclick="openMoveP('${w.id}')" style="background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE;font-weight:600">↗ 차수 이동</button>
      <button class="btn suc" onclick="expW('${w.id}')">⬇ 시딩 엑셀</button>
      <button class="btn" style="background:#FFF7ED;color:#C2410C;border-color:#FED7AA;font-weight:600" onclick="expOrder('${w.id}')">📦 로젠 발주서</button>
      <button class="btn dan ico" onclick="delW('${w.id}')">✕</button>`;
@@ -1041,6 +1042,69 @@ function openAddP(wid){
     <div class="fr"><label>비고</label><input id="fn" placeholder="진행이력 등"></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddP('${wid}')">추가</button></div>`);
+}
+function openMoveP(wid){
+  const w=DB.weekly.find(x=>x.id===wid);
+  if(!w||w.people.length===0){toast('이동할 인원이 없어요');return;}
+  const targets=DB.weekly.filter(x=>x.id!==wid).sort((a,b)=>b.round-a.round);
+  om(`<div class="mh"><h3>차수 이동</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요.</p>
+    <div style="border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;margin-bottom:14px">
+      <div style="background:#f9f9f9;padding:6px 12px;font-size:11px;font-weight:700;color:#888;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px">
+        <div><input type="checkbox" id="move-chk-all" onchange="toggleAllMove(this)"></div>
+        <div>활동명</div><div>제품</div>
+      </div>
+      ${w.people.map(p=>`
+      <div style="padding:6px 12px;border-top:1px solid #e8e8e8;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px;align-items:center;font-size:12px">
+        <div><input type="checkbox" class="move-chk" value="${p.id}"></div>
+        <div style="font-weight:600">${e(p.handle)}</div>
+        <div style="color:#888">${(p.products||[]).join(', ')||'-'}</div>
+      </div>`).join('')}
+    </div>
+    <div class="fr">
+      <label>이동할 차수</label>
+      <select id="move-target" style="padding:7px 10px;border-radius:7px;border:1px solid #e8e8e8;font-size:13px;font-family:inherit">
+        ${targets.length?targets.map(t=>`<option value="${t.id}">${t.round}차 (${t.date})</option>`).join(''):''}
+        <option value="__new__">+ 새 차수 만들기</option>
+      </select>
+    </div>
+    <div class="fr" id="move-new-date" style="display:none">
+      <label>새 차수 날짜</label>
+      <input type="date" id="move-new-date-input" value="${today()}">
+    </div>
+  </div>
+  <div class="mf">
+    <button class="btn" onclick="cm()">취소</button>
+    <button class="btn pri" onclick="executeMoveP('${wid}')">이동</button>
+  </div>`);
+  document.getElementById('move-target').addEventListener('change',function(){
+    document.getElementById('move-new-date').style.display=this.value==='__new__'?'':'none';
+  });
+}
+function toggleAllMove(chk){
+  document.querySelectorAll('.move-chk').forEach(c=>c.checked=chk.checked);
+}
+function executeMoveP(wid){
+  const selected=[...document.querySelectorAll('.move-chk:checked')].map(c=>c.value);
+  if(!selected.length){toast('이동할 인원을 선택해주세요');return;}
+  const targetId=document.getElementById('move-target').value;
+  const w=DB.weekly.find(x=>x.id===wid);
+  const people=w.people.filter(p=>selected.includes(p.id));
+  let target;
+  if(targetId==='__new__'){
+    const newDate=document.getElementById('move-new-date-input').value;
+    const maxRound=Math.max(0,...DB.weekly.map(x=>x.round));
+    target={id:'w'+uid(),round:maxRound+1,date:newDate,people:[]};
+    DB.weekly.push(target);
+  } else {
+    target=DB.weekly.find(x=>x.id===targetId);
+  }
+  // 이동
+  people.forEach(p=>target.people.push({...p,id:'p'+uid()}));
+  w.people=w.people.filter(p=>!selected.includes(p.id));
+  save();renderSB();renderPage();cm();
+  toast(`${selected.length}명 → ${target.round}차로 이동됨`);
 }
 function addProdField(){const list=document.getElementById('prod-list');const idx=list.querySelectorAll('.prod-row').length+1;const row=document.createElement('div');row.className='fg prod-row';row.innerHTML=`<div class="fr" style="flex:1"><label>제품 ${idx}</label><input class="prod-input" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button>`;list.appendChild(row);}
 function getProducts(){return [...document.querySelectorAll('.prod-input')].map(x=>x.value.trim()).filter(Boolean);}

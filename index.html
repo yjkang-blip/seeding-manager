@@ -194,9 +194,14 @@ tbody tr:hover td{background:#f8fbf8}
 <div class="toast" id="toast"></div>
 
 <script>
-// ══════════════════════════════
-//  DATA
-// ══════════════════════════════
+// 드래그 중 사이드바 버튼 클릭 방지
+let _isDragging=false;
+let _dragStartX=0,_dragStartY=0;
+document.addEventListener('mousedown',e=>{_dragStartX=e.clientX;_dragStartY=e.clientY;_isDragging=false;});
+document.addEventListener('mousemove',e=>{
+  if(Math.abs(e.clientX-_dragStartX)>5||Math.abs(e.clientY-_dragStartY)>5) _isDragging=true;
+});
+document.addEventListener('mouseup',()=>{setTimeout(()=>{_isDragging=false;},50);});
 var DB={weekly:[],monthly:[],campaigns:[],exposure:[]};
 var cur={tab:'dash',campType:'릴스',id:null};
 let _uid=100;
@@ -403,7 +408,7 @@ function addToCamp(handle,campId){
 // ══════════════════════════════
 //  NAVIGATION
 // ══════════════════════════════
-function mainTab(tab){
+function mainTab(tab){if(_isDragging)return;
   if(cur.tab!==tab) cur.id=null;
   cur.tab=tab;
   document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',['dash','weekly','monthly','campaign','exposure','history'][i]===tab));
@@ -439,7 +444,7 @@ function renderSB(){
       const label=month.includes('-')?`${parseInt(month.split('-')[1])}월`:month;
       const items=grouped[month].map(r=>{
         const dateLabel=r.dateStart&&r.dateEnd?`${r.dateStart.slice(5).replace('-','/')} ~ ${r.dateEnd.slice(5).replace('-','/')}`:r.date||'';
-        return `<button class="sbi${cur.id===r.id?' on':''}" onclick="cur.id='${r.id}';renderSB();renderPage()">
+        return `<button class="sbi${cur.id===r.id?' on':''}" onclick="if(_isDragging)return;cur.id='${r.id}';renderSB();renderPage()">
           <span style="display:block;font-weight:600">${e(r.title)}</span>
           <span style="display:block;font-size:10px;opacity:.7;margin-top:1px">${dateLabel}</span>
         </button>`;
@@ -495,9 +500,9 @@ function renderSB(){
   el.innerHTML=h;
 }
 
-function selW(id){cur.id=id;cur.tab='weekly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===1));renderSB();renderPage();}
-function selM(id){cur.id=id;cur.tab='monthly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===2));renderSB();renderPage();}
-function selC(id){
+function selW(id){if(_isDragging)return;cur.id=id;cur.tab='weekly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===1));renderSB();renderPage();}
+function selM(id){if(_isDragging)return;cur.id=id;cur.tab='monthly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===2));renderSB();renderPage();}
+function selC(id){if(_isDragging)return;
   const c=DB.campaigns.find(x=>x.id===id);
   if(c) cur.campType=c.type;
   cur.id=id;cur.tab='campaign';
@@ -872,7 +877,7 @@ function pgExposure(){
     ${DB.exposure.length===0?`<div class="nodata" style="margin-top:60px">보고서를 추가해주세요</div>`:
     `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
       ${DB.exposure.map(r=>`
-        <div onclick="cur.id='${r.id}';renderSB();renderPage()" style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;cursor:pointer;transition:.15s" onmouseover="this.style.borderColor='#52B788'" onmouseout="this.style.borderColor='#e8e8e8'">
+        <div onclick="if(_isDragging)return;cur.id='${r.id}';renderSB();renderPage()" style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;cursor:pointer;transition:.15s" onmouseover="this.style.borderColor='#52B788'" onmouseout="this.style.borderColor='#e8e8e8'">
           <div style="font-weight:700;font-size:14px;margin-bottom:6px">${e(r.title)}</div>
           <div style="font-size:11px;color:#888">${r.dateStart&&r.dateEnd?`${r.dateStart} ~ ${r.dateEnd}`:r.date||''}</div>
           <div style="font-size:11px;color:#aaa;margin-top:4px">${r.sections?r.sections.length:0}개 섹션</div>

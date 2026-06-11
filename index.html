@@ -1096,18 +1096,16 @@ function previewPaste(){
   const saveBtn=document.getElementById('paste-save-btn');
   if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsed=[];return;}
   // 탭이 있는 줄 기준으로 행 분리 (셀 안의 줄바꿈 처리)
-  const rows=[];
-  let cur_row='';
-  raw.split('\n').forEach(line=>{
-    if(line.includes('\t')){
-      if(cur_row) rows.push(cur_row);
-      cur_row=line;
-    } else {
-      // 탭 없는 줄 = 이전 셀의 줄바꿈이거나 새 줄
-      cur_row = cur_row ? cur_row+' '+line.trim() : line;
-    }
+  // 엑셀 복사 형식 파싱: 따옴표로 감싸진 셀 내 줄바꿈 처리
+  const rows = [];
+  // 따옴표 안의 줄바꿈을 공백으로 치환 후 행 분리
+  const normalized = raw.replace(/"([^"]*)"/g, (match, p1) => '"' + p1.replace(/\n/g, ' ').replace(/\t/g, ' ') + '"');
+  normalized.split('\n').forEach(line => {
+    if (!line.trim()) return;
+    // 따옴표 제거
+    const cleaned = line.replace(/"([^"]*)"/g, (m, p1) => p1.trim());
+    rows.push(cleaned);
   });
-  if(cur_row) rows.push(cur_row);
   _parsed=[];
   let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
     <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
@@ -1170,17 +1168,13 @@ function parsePasteC(){
   const countEl=document.getElementById('paste-count-c');
   const saveBtn=document.getElementById('paste-save-btn-c');
   if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsedC=[];return;}
-  const rows=[];
-  let cur_row='';
-  raw.split('\n').forEach(line=>{
-    if(line.includes('\t')){
-      if(cur_row) rows.push(cur_row);
-      cur_row=line;
-    } else {
-      cur_row=cur_row?cur_row+' '+line.trim():line;
-    }
+  const rows = [];
+  const normalized = raw.replace(/"([^"]*)"/g, (match, p1) => '"' + p1.replace(/\n/g, ' ').replace(/\t/g, ' ') + '"');
+  normalized.split('\n').forEach(line => {
+    if (!line.trim()) return;
+    const cleaned = line.replace(/"([^"]*)"/g, (m, p1) => p1.trim());
+    rows.push(cleaned);
   });
-  if(cur_row) rows.push(cur_row);
   _parsedC=[];
   let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
     <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">

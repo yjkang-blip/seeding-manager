@@ -103,6 +103,8 @@ tbody tr:hover td{background:#f8fbf8}
 .t-ph{background:#FFF4E6;color:#9a3412}
 .t-ty{background:var(--g4);color:var(--g1)}
 .t-fe{background:#FEE2E2;color:#991B1B}
+.t-zvzo{background:#EDE9FE;color:#5B21B6}
+.t-branderz{background:#FEF3C7;color:#92400E}
 .nodata{text-align:center;padding:50px;color:var(--gray4);font-size:13px}
 
 /* MONTHLY BLOCKS */
@@ -183,8 +185,8 @@ tbody tr:hover td{background:#f8fbf8}
       <button class="mt"    onclick="mainTab('monthly')">월간 통합</button>
       <button class="mt"    onclick="mainTab('campaign')">캠페인</button>
       <button class="mt"    onclick="mainTab('exposure')">📣 노출 보고</button>
-      <button class="mt cost" onclick="mainTab('cost')">💰 현물정산</button>
       <div class="nav-sep"></div>
+      <button class="mt cost" onclick="mainTab('cost')">💰 현물정산</button>
       <button class="mt hist" onclick="mainTab('history')">📊 진행이력</button>
       <div class="nav-act" id="nav-act"></div>
     </nav>
@@ -204,7 +206,7 @@ document.addEventListener('mousemove',e=>{
   if(Math.abs(e.clientX-_dragStartX)>5||Math.abs(e.clientY-_dragStartY)>5) _isDragging=true;
 });
 document.addEventListener('mouseup',()=>{setTimeout(()=>{_isDragging=false;},50);});
-var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[]};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[]};
 var cur={tab:'dash',campType:'릴스',id:null};
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
@@ -384,7 +386,11 @@ const g=id=>(document.getElementById(id)||{}).value||'';
 const today=()=>new Date().toISOString().slice(0,10);
 const isDM=c=>!c||(c||'').toUpperCase()==='DM';
 const normH=s=>(s||'').replace(/[\s\n\r()_\-]/g,'').toLowerCase();
-const typeOpts=sel=>['피드','릴스','유튜브','단순 선물','시딩','피드 or 릴스','유튜브 or 피드','기타'].map(t=>`<option${t===sel?' selected':''}>${t}</option>`).join('');
+const typeTag=t=>{
+  const cls=t==='zvzo 협업'?'t-zvzo':t==='브랜더진 협업'?'t-branderz':'t-ty';
+  return '<span class="tag '+cls+'">'+(t||'-')+'</span>';
+};
+const typeOpts=sel=>['피드','릴스','유튜브','단순 선물','시딩','피드 or 릴스','유튜브 or 피드','zvzo 협업','브랜더진 협업','기타'].map(t=>`<option${t===sel?' selected':''}>${t}</option>`).join('');
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('on');setTimeout(()=>el.classList.remove('on'),2400);}
 
 // 캠페인 참여 배지 (핸들 기준)
@@ -590,13 +596,8 @@ function costCalc(md){
 }
 
 // ── 저장 토스트 ──
-function costSave(){
-  // 자동저장 안함 - 저장 버튼으로만
-}
-function costManualSave(month){
-  save();
-  toast('저장됐어요 ✓');
-}
+function costSave(){}
+function costManualSave(month){save();toast('저장됐어요 ✓');}
 
 // ────────────────────────────────
 //  LIST VIEW
@@ -613,34 +614,43 @@ function pgCostList(){
   months.forEach(md=>{const c=costCalc(md);gQty+=c.totalQty;gPeople+=c.totalPeople;gEx+=c.grandEx;gInc+=c.grandInc;});
 
   pg.innerHTML=`
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
     ${[{l:'누적 인원',v:fmtW(gPeople)+'명'},{l:'누적 수량',v:fmtW(gQty)+'개'},{l:'누적 원가 (VAT-)',v:fmtC(gEx)},{l:'누적 원가 (VAT+)',v:fmtC(gInc)}]
       .map(c=>`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:14px 16px"><div style="font-size:11px;color:#888;margin-bottom:4px">${c.l}</div><div style="font-size:17px;font-weight:700">${c.v}</div></div>`).join('')}
   </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-    ${months.map(md=>{
-      const c=costCalc(md);
-      const bars=COST_ORDER.filter(k=>(c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0))>0);
-      return `<div onclick="costOpenMonth('${md.month}')" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 4px rgba(0,0,0,.06)'" style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:18px 18px 14px;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 1px 4px rgba(0,0,0,.06)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <span style="font-size:15px;font-weight:700">${md.month}</span>
-          <span style="font-size:11px;color:#888">${c.totalPeople?c.totalPeople+'명 · ':''}${fmtW(c.totalQty)}개</span>
-        </div>
-        <div style="font-size:20px;font-weight:700;color:#1D4E3A;margin-bottom:12px">${fmtC(c.grandEx)}</div>
-        <div style="font-size:11px;color:#aaa;margin-bottom:6px">VAT+ ${fmtC(c.grandInc)}</div>
-        <div style="border-top:1px solid #f0f0f0;padding-top:10px;display:flex;flex-direction:column;gap:5px">
-          ${bars.map(k=>{
-            const qty=c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0);
-            const cost=c.ov[k]?.cost!=null?c.ov[k].cost:(c.g[k]?.cost||0);
-            return `<div style="display:flex;justify-content:space-between;font-size:12px">
-              <span style="color:#666">${k}</span>
-              <span style="font-weight:600;color:#333">${fmtW(qty)}개 · ${fmtC(cost)}</span>
-            </div>`;
-          }).join('')}
-          ${c.extraEx?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#666">유가비용</span><span style="font-weight:600;color:#333">${fmtC(c.extraEx)}</span></div>`:''}
-        </div>
-      </div>`;
-    }).join('')}
+  <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:800px">
+      <thead><tr style="background:#f9f9f9">
+        <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">월</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">인원</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">수량</th>
+        ${COST_ORDER.map(k=>`<th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">${k}</th>`).join('')}
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">유가비용</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT-</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT+</th>
+        <th style="padding:10px 8px;border-bottom:1px solid #e8e8e8"></th>
+      </tr></thead>
+      <tbody>
+        ${months.map(md=>{
+          const c=costCalc(md);
+          return `<tr style="border-bottom:1px solid #e8e8e8;cursor:pointer" onclick="costOpenMonth('${md.month}')" onmouseover="this.style.background='#f8fbf8'" onmouseout="this.style.background=''">
+            <td style="padding:11px 14px;font-weight:600">${md.month}</td>
+            <td style="padding:11px 10px;text-align:right">${c.totalPeople?fmtW(c.totalPeople)+'명':'-'}</td>
+            <td style="padding:11px 10px;text-align:right">${fmtW(c.totalQty)}개</td>
+            ${COST_ORDER.map(k=>{
+              const qty=(c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0));
+              return `<td style="padding:11px 10px;text-align:right;color:${qty?'#111':'#ccc'}">${qty?fmtW(qty)+'개':'-'}</td>`;
+            }).join('')}
+            <td style="padding:11px 10px;text-align:right;color:${c.extraEx?'#111':'#ccc'}">${c.extraEx?fmtC(c.extraEx):'-'}</td>
+            <td style="padding:11px 10px;text-align:right;font-weight:600">${fmtC(c.grandEx)}</td>
+            <td style="padding:11px 10px;text-align:right;color:#888">${fmtC(c.grandInc)}</td>
+            <td style="padding:11px 8px;text-align:center"><button class="btn sm" onclick="event.stopPropagation();costOpenMonth('${md.month}')" style="font-size:11px">편집</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
   </div>`;
 }
 
@@ -714,7 +724,7 @@ function _renderCostModal(md){
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <div>
       <div style="font-size:17px;font-weight:700">${month} 현물 정산</div>
-      <div style="font-size:12px;color:#888;margin-top:2px">수정 후 저장 버튼을 눌러주세요</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">수정 후 💾 저장 버튼을 눌러주세요</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label style="padding:6px 14px;border:1px solid #e8e8e8;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;background:#fff;display:inline-flex;align-items:center;gap:5px">
@@ -1155,7 +1165,7 @@ function pgWeekly(){
             <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
             <td style="font-size:11px;color:#666">${p.phone?e(p.phone):'<span style="color:#ddd">—</span>'}</td>
             <td style="font-size:11px;color:#888;max-width:130px">${p.address?e(p.address):'<span style="color:#ddd">—</span>'}</td>
-            <td><span class="tag t-ty">${e(p.type)||'-'}</span></td>
+            <td>${typeTag(p.type||'')}</td>
             <td style="font-size:11px;color:#999;max-width:100px">${e(p.note)||''}</td>
             <td style="white-space:nowrap">
               <button class="btn sm" onclick="openEditP('${w.id}','${p.id}')">수정</button>
@@ -1228,7 +1238,7 @@ function pgMonthly(){
         <td style="font-size:11px">${(p.products||[p.product,p.product2].filter(Boolean)).map(x=>e(x)).join('<br>')||'-'}</td>
         <td><span class="tag ${isDM(p.contact)?'t-dm':'t-em'}">${e(p.contact)||'-'}</span></td>
         <td style="font-size:11px;color:#888">${p.address?e(p.address):'-'}</td>
-        <td><span class="tag t-ty">${e(p.type)||'-'}</span></td>
+        <td>${typeTag(p.type||'')}</td>
       </tr>`;}).join('')}</tbody>
     </table></div></div>
   </div>`).join('')}`;
@@ -1244,10 +1254,25 @@ function pgCampaign(){
   const c=cur.id?DB.campaigns.find(x=>x.id===cur.id&&x.type===cur.campType):null;
 
   // 서브탭 HTML
-  const subHtml=`<div class="stab-wrap">
-    ${types.map(t=>`<button class="stab${cur.campType===t?' on':''}" data-type="${t}" onclick="campSubTab('${t}')">${t==='릴스'?'🎬':t==='2차 활용'?'♻️':'📌'} ${t}<span class="camp-count">${DB.campaigns.filter(c=>c.type===t).length}</span></button>`).join('')}
-    <button class="stab-new" onclick="openNewCampType()">＋ 새 유형</button>
-  </div>`;
+  const _stabTypes=types.map(function(t){
+    var on=cur.campType===t?' on':'';
+    var icon=t==='릴스'?'🎬':t==='2차 활용'?'♻️':'📌';
+    var cnt=DB.campaigns.filter(function(c){return c.type===t;}).length;
+    return '<button class="stab'+on+'" data-type="'+t+'" onclick="campSubTab(this.dataset.type)">'+icon+' '+t+'<span class="camp-count">'+cnt+'</span></button>';
+  }).join('');
+  var _zvzoOn=cur.campType==='__zvzo'?' on':'';
+  var _branOn=cur.campType==='__branderz'?' on':'';
+  const subHtml='<div class="stab-wrap">'+_stabTypes
+    +'<button class="stab'+_zvzoOn+'" data-type="__zvzo" onclick="campSubTab(this.dataset.type)">🔗 zvzo 협업</button>'
+    +'<button class="stab'+_branOn+'" data-type="__branderz" onclick="campSubTab(this.dataset.type)">🏷 브랜더진 협업</button>'
+    +'<button class="stab-new" onclick="openNewCampType()">＋ 새 유형</button>'
+    +'</div>';
+
+  // 협업 탭 분기
+  if(cur.campType==='__zvzo'||cur.campType==='__branderz'){
+    pgCollabTab(cur.campType==='__zvzo'?'zvzo':'브랜더진', subHtml);
+    return;
+  }
 
   if(!c){
     // 목록 화면
@@ -1561,37 +1586,37 @@ function openMoveP(wid){
   const w=DB.weekly.find(x=>x.id===wid);
   if(!w||w.people.length===0){toast('이동할 인원이 없어요');return;}
   const targets=DB.weekly.filter(x=>x.id!==wid).sort((a,b)=>b.round-a.round);
-  om(`<div class="mh"><h3>차수 이동</h3><button class="btn ico" onclick="cm()">✕</button></div>
-  <div class="mb">
-    <p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요.</p>
-    <div style="border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;margin-bottom:14px">
-      <div style="background:#f9f9f9;padding:6px 12px;font-size:11px;font-weight:700;color:#888;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px">
-        <div><input type="checkbox" id="move-chk-all" onchange="toggleAllMove(this)"></div>
-        <div>활동명</div><div>제품</div>
-      </div>
-      ${w.people.map(p=>`
-      <div style="padding:6px 12px;border-top:1px solid #e8e8e8;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px;align-items:center;font-size:12px">
-        <div><input type="checkbox" class="move-chk" value="${p.id}"></div>
-        <div style="font-weight:600">${e(p.handle)}</div>
-        <div style="color:#888">${(p.products||[]).join(', ')||'-'}</div>
-      </div>`).join('')}
-    </div>
-    <div class="fr">
-      <label>이동할 차수</label>
-      <select id="move-target" style="padding:7px 10px;border-radius:7px;border:1px solid #e8e8e8;font-size:13px;font-family:inherit">
-        ${targets.length?targets.map(t=>`<option value="${t.id}">${t.round}차 (${t.date})</option>`).join(''):''}
-        <option value="__new__">+ 새 차수 만들기</option>
-      </select>
-    </div>
-    <div class="fr" id="move-new-date" style="display:none">
-      <label>새 차수 날짜</label>
-      <input type="date" id="move-new-date-input" value="${today()}">
-    </div>
-  </div>
-  <div class="mf">
-    <button class="btn" onclick="cm()">취소</button>
-    <button class="btn pri" onclick="executeMoveP('${wid}')">이동</button>
-  </div>`);
+  var _moveRows=w.people.map(function(p){
+    return '<div style="padding:6px 12px;border-top:1px solid #e8e8e8;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px;align-items:center;font-size:12px">'
+      +'<div><input type="checkbox" class="move-chk" value="'+p.id+'"></div>'
+      +'<div style="font-weight:600">'+e(p.handle)+'</div>'
+      +'<div style="color:#888">'+((p.products||[]).join(', ')||'-')+'</div>'
+      +'</div>';
+  }).join('');
+  var _moveOpts=targets.length?targets.map(function(t){return '<option value="'+t.id+'">'+t.round+'차 ('+t.date+')</option>';}).join(''):'';
+  om('<div class="mh"><h3>차수 이동</h3><button class="btn ico" onclick="cm()">✕</button></div>'
+    +'<div class="mb">'
+    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요.</p>'
+    +'<div style="border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;margin-bottom:14px">'
+    +'<div style="background:#f9f9f9;padding:6px 12px;font-size:11px;font-weight:700;color:#888;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px">'
+    +'<div><input type="checkbox" id="move-chk-all" onchange="toggleAllMove(this)"></div>'
+    +'<div>활동명</div><div>제품</div></div>'
+    +_moveRows
+    +'</div>'
+    +'<div class="fr"><label>이동할 차수</label>'
+    +'<select id="move-target" style="padding:7px 10px;border-radius:7px;border:1px solid #e8e8e8;font-size:13px;font-family:inherit">'
+    +_moveOpts
+    +'<option value="__new__">+ 새 차수 만들기</option>'
+    +'</select></div>'
+    +'<div class="fr" id="move-new-date" style="display:none">'
+    +'<label>새 차수 날짜</label>'
+    +'<input type="date" id="move-new-date-input" value="'+today()+'">'
+    +'</div>'
+    +'</div>'
+    +'<div class="mf">'
+    +'<button class="btn" onclick="cm()">취소</button>'
+    +'<button class="btn pri" data-wid="'+wid+'" onclick="executeMoveP(this.dataset.wid)">이동</button>'
+    +'</div>');
   document.getElementById('move-target').addEventListener('change',function(){
     document.getElementById('move-new-date').style.display=this.value==='__new__'?'':'none';
   });
@@ -1830,6 +1855,83 @@ function saveAddCampRound(){
 }
 
 // 새 캠페인 유형 추가
+
+// ── 협업 일정 탭 (zvzo / 브랜더진) ──
+function pgCollabTab(brand, subHtml){
+  if(!DB.collabs) DB.collabs=[];
+  const items=DB.collabs.filter(x=>x.brand===brand).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  document.getElementById('nav-act').innerHTML='<button class="btn pri" data-brand="'+brand+'" onclick="openAddCollab(this.dataset.brand)">＋ 협업 추가</button>';
+  const rows=items.length===0?'<tr><td colspan="7" class="nodata">협업을 추가해주세요</td></tr>':items.map(function(item){
+    var s=new Date(item.startDate),en=new Date(item.endDate),td=new Date();
+    var days=Math.round((en-s)/(1000*60*60*24))+1;
+    var isActive=s<=td&&td<=en,isEnd=td>en;
+    var statusBg=isActive?'#D1FAE5':isEnd?'#F3F4F6':'#EEF2FF';
+    var statusColor=isActive?'#065F46':isEnd?'#9CA3AF':'#3730A3';
+    var statusText=isActive?'진행중':isEnd?'종료':'예정';
+    return '<tr>'
+      +'<td><div style="font-weight:600">'+item.name+'</div>'+(item.handle?'<div style="font-size:11px;color:#888">@'+item.handle+'</div>':'')+'</td>'
+      +'<td style="font-size:12px">'+(item.product||'-')+'</td>'
+      +'<td>'+item.startDate+'</td>'
+      +'<td>'+item.endDate+'</td>'
+      +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+statusBg+';color:'+statusColor+'">'+statusText+' '+days+'일</span></td>'
+      +'<td style="font-size:12px;color:#888">'+(item.note||'-')+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn sm" data-id="'+item.id+'" onclick="openEditCollab(this.dataset.id)">수정</button> <button class="btn sm dan" data-id="'+item.id+'" onclick="delCollab(this.dataset.id)">🗑</button></td>'
+      +'</tr>';
+  }).join('');
+  document.getElementById('page').innerHTML=subHtml
+    +'<div class="tw"><div class="tw-h"><h3>'+(brand==='zvzo'?'🔗':'🏷')+' '+brand+' 협업 일정</h3><span class="sub">'+items.length+'건</span></div>'
+    +'<div class="tsc"><table>'
+    +'<thead><tr><th>협업자/채널</th><th>제품</th><th>시작일</th><th>종료일</th><th>상태</th><th>비고</th><th></th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div></div>';
+}
+
+function openAddCollab(brand){
+  var d=today();
+  om('<div class="mh"><h3>'+brand+' 협업 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>'
+    +'<div class="mb">'
+    +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
+    +'<div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div>'
+    +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+d+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+d+'"></div></div>'
+    +'<div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div>'
+    +'</div>'
+    +'<div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-brand="'+brand+'" onclick="saveAddCollab(this.dataset.brand)">추가</button></div>');
+}
+
+function saveAddCollab(brand){
+  var name=g('cl1').trim();if(!name){alert('협업자 이름 필수');return;}
+  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),startDate:g('cl4'),endDate:g('cl5'),note:g('cl6').trim()};
+  if(!DB.collabs) DB.collabs=[];
+  DB.collabs.push(item);
+  save();cm();toast(name+' 협업 추가됨');
+  cur.campType=brand==='zvzo'?'__zvzo':'__branderz';
+  pgCampaign();
+}
+
+function openEditCollab(id){
+  var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
+  om('<div class="mh"><h3>협업 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>'
+    +'<div class="mb">'
+    +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" value="'+e(item.name)+'"></div><div class="fr"><label>채널 아이디</label><input id="cl2" value="'+e(item.handle||'')+'"></div></div>'
+    +'<div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div>'
+    +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+item.startDate+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+item.endDate+'"></div></div>'
+    +'<div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div>'
+    +'</div>'
+    +'<div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-id="'+id+'" onclick="saveEditCollab(this.dataset.id)">저장</button></div>');
+}
+
+function saveEditCollab(id){
+  var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
+  item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();
+  item.startDate=g('cl4');item.endDate=g('cl5');item.note=g('cl6').trim();
+  save();cm();toast('수정됨');pgCampaign();
+}
+
+function delCollab(id){
+  if(!confirm('삭제할까요?'))return;
+  DB.collabs=DB.collabs.filter(function(x){return x.id!==id;});
+  save();pgCampaign();toast('삭제됨');
+}
+
 function openNewCampType(){
   om(`<div class="mh"><h3>새 캠페인 유형 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
@@ -2087,6 +2189,7 @@ function restoreData(input){
       }
       if(!confirm(`백업 파일을 불러올까요?\n현재 데이터는 백업 데이터로 교체됩니다.\n\n주간: ${data.weekly.length}차 / 캠페인: ${data.campaigns.length}개`))return;
       if(!data.cost) data.cost=[];
+      if(!data.collabs) data.collabs=[];
       DB=data;
       save();
       cur={tab:'dash',campType:'릴스',id:null};
@@ -2168,7 +2271,6 @@ try {
       DB.monthly = data.monthly;
       DB.campaigns = data.campaigns;
       DB.exposure = data.exposure || [];
-      DB.cost = data.cost || [];
     } else {
       seed();
       await window._fbSave();
@@ -2204,6 +2306,7 @@ onSnapshot(DB_DOC, (snap) => {
       DB.campaigns = data.campaigns;
       DB.exposure = data.exposure || [];
       DB.cost = data.cost || [];
+      DB.collabs = data.collabs || [];
       renderSB();
       renderPage();
     }

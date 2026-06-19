@@ -1164,6 +1164,8 @@ function pgWeekly(){
             <td style="max-width:150px;font-size:11px">${(p.products||[p.product,p.product2].filter(Boolean)).map(x=>`<div>${e(x)}</div>`).join('')||'-'}</td>
             <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
             <td style="font-size:11px;color:#666">${p.phone?e(p.phone):'<span style="color:#ddd">—</span>'}</td>
+            <td style="font-size:11px;color:#52B788">${p.sendDate||'-'}</td>
+            <td style="font-size:11px;color:#3B82F6">${p.uploadDate||'-'}</td>
             <td style="font-size:11px;color:#888;max-width:130px">${p.address?e(p.address):'<span style="color:#ddd">—</span>'}</td>
             <td>${typeTag(p.type||'')}</td>
             <td style="font-size:11px;color:#999;max-width:100px">${e(p.note)||''}</td>
@@ -1249,7 +1251,9 @@ function togB(wid){const b=document.getElementById('wb-'+wid),h=document.getElem
 function pgCampaign(){
   // 서브탭 데이터
   const types=[...new Set(DB.campaigns.map(c=>c.type))];
-  if(!types.includes(cur.campType)&&types.length) cur.campType=types[0];
+  // zvzo/브랜더진 탭은 별도 처리하므로 초기화에서 제외
+  const isCollabTab=cur.campType==='__zvzo'||cur.campType==='__branderz';
+  if(!isCollabTab&&!types.includes(cur.campType)&&types.length) cur.campType=types[0];
   const filtered=DB.campaigns.filter(c=>c.type===cur.campType).sort((a,b)=>b.round-a.round);
   const c=cur.id?DB.campaigns.find(x=>x.id===cur.id&&x.type===cur.campType):null;
 
@@ -1258,13 +1262,19 @@ function pgCampaign(){
     var on=cur.campType===t?' on':'';
     var icon=t==='릴스'?'🎬':t==='2차 활용'?'♻️':'📌';
     var cnt=DB.campaigns.filter(function(c){return c.type===t;}).length;
-    return '<button class="stab'+on+'" data-type="'+t+'" onclick="campSubTab(this.dataset.type)">'+icon+' '+t+'<span class="camp-count">'+cnt+'</span></button>';
+    return '<button class="stab'+on+'" data-type="'+t+'" onclick="campSubTab(this.dataset.type)">'+icon+' '+t+'<span class="camp-count">'+cnt+'</span></button>'
+      +'<button data-type="'+t+'" onclick="renameCampType(this.dataset.type)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="이름 수정">✏️</button>'
+      +'<button data-type="'+t+'" onclick="deleteCampType(this.dataset.type)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="삭제">✕</button>';
   }).join('');
   var _zvzoOn=cur.campType==='__zvzo'?' on':'';
   var _branOn=cur.campType==='__branderz'?' on':'';
   const subHtml='<div class="stab-wrap">'+_stabTypes
     +'<button class="stab'+_zvzoOn+'" data-type="__zvzo" onclick="campSubTab(this.dataset.type)">🔗 zvzo 협업</button>'
+    +'<button data-brand="zvzo" onclick="renameCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="이름 수정">✏️</button>'
+    +'<button data-brand="zvzo" onclick="deleteCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="삭제">✕</button>'
     +'<button class="stab'+_branOn+'" data-type="__branderz" onclick="campSubTab(this.dataset.type)">🏷 브랜더진 협업</button>'
+    +'<button data-brand="브랜더진" onclick="renameCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="이름 수정">✏️</button>'
+    +'<button data-brand="브랜더진" onclick="deleteCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="삭제">✕</button>'
     +'<button class="stab-new" onclick="openNewCampType()">＋ 새 유형</button>'
     +'</div>';
 
@@ -1290,14 +1300,20 @@ function pgCampaign(){
     <div class="tw">
       <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${cur.campType} 캠페인</h3><span class="sub">${filtered.length}차 · 총 ${totalP}명</span></div>
       <div class="tsc"><table>
-        <thead><tr><th>차수</th><th>날짜</th><th>인원</th><th>팔로워</th><th>${cur.campType==='릴스'?'비용':'배송지 확보'}</th><th></th></tr></thead>
+        <thead><tr><th>차수</th><th>날짜</th><th>발송월</th><th>업로드월</th><th>인원</th><th>팔로워</th><th>${cur.campType==='릴스'?'비용':'배송지 확보'}</th><th></th></tr></thead>
         <tbody>${filtered.length===0?`<tr><td colspan="6" class="nodata">차수를 추가해주세요</td></tr>`:
           filtered.map(c=>{
             const fee=c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
             const f=c.people.reduce((a,p)=>a+(p.followers||0),0);
+            const sendDates=c.people.map(p=>p.sendDate).filter(Boolean);
+            const uploadDates=c.people.map(p=>p.uploadDate).filter(Boolean);
+            const sendMonths=[...new Set(sendDates.map(d=>d.slice(0,7)))].join(', ')||'-';
+            const uploadMonths=[...new Set(uploadDates.map(d=>d.slice(0,7)))].join(', ')||'-';
             return`<tr>
               <td><input type="number" value="${c.round}" min="1" style="width:48px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updCRound('${c.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
               <td><input type="date" value="${c.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updCDate('${c.id}',this.value)"></td>
+              <td><span style="font-size:11px;color:#52B788">${sendMonths}</span></td>
+              <td><span style="font-size:11px;color:#3B82F6">${uploadMonths}</span></td>
               <td>${c.people.length}명</td>
               <td>${(f/10000).toFixed(1)}만</td>
               <td>${cur.campType==='릴스'?fee+'만원':c.people.filter(p=>p.address).length+'명'}</td>
@@ -1332,7 +1348,7 @@ function pgCampaign(){
   <div class="tw">
     <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${c.name} ${c.round}차</h3><span class="sub">총 ${c.people.length}명${cur.campType==='릴스'?' · '+totalFee+'만원':''}</span></div>
     <div class="tsc"><table>
-      <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>연락처</th><th>배송지</th>${cur.campType==='릴스'?'<th>비용</th>':''}<th>비고</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>발송일</th><th>업로드일</th><th>연락처</th><th>배송지</th>${cur.campType==='릴스'?'<th>비용</th>':''}<th>비고</th><th></th></tr></thead>
       <tbody>${c.people.length===0?`<tr><td colspan="9" class="nodata">인원을 추가해주세요</td></tr>`:
         c.people.map((p,i)=>`<tr>
           <td style="color:#ccc">${i+1}</td>
@@ -1932,6 +1948,40 @@ function delCollab(id){
   save();pgCampaign();toast('삭제됨');
 }
 
+function renameCollab(brand){
+  var newName=prompt('새 이름 입력', brand);
+  if(!newName||!newName.trim()||newName.trim()===brand) return;
+  newName=newName.trim();
+  DB.collabs.forEach(function(c){if(c.brand===brand) c.brand=newName;});
+  save();pgCampaign();toast('이름 변경됨');
+}
+function deleteCollab(brand){
+  var cnt=(DB.collabs||[]).filter(function(c){return c.brand===brand;}).length;
+  if(!confirm(brand+' 협업 탭을 삭제할까요?\n(협업 데이터 '+cnt+'건도 삭제됩니다)')) return;
+  DB.collabs=DB.collabs.filter(function(c){return c.brand!==brand;});
+  if(cur.campType==='__zvzo'||cur.campType==='__branderz') cur.campType='릴스';
+  save();pgCampaign();toast(brand+' 탭 삭제됨');
+}
+
+function renameCampType(type){
+  var newName=prompt('새 이름 입력', type);
+  if(!newName||!newName.trim()||newName.trim()===type) return;
+  newName=newName.trim();
+  DB.campaigns.forEach(function(c){if(c.type===type) c.type=newName;});
+  if(cur.campType===type) cur.campType=newName;
+  save();pgCampaign();toast('이름 변경됨');
+}
+function deleteCampType(type){
+  var cnt=DB.campaigns.filter(function(c){return c.type===type;}).length;
+  if(!confirm(type+' 유형을 삭제할까요?\n(해당 유형 캠페인 '+cnt+'개도 삭제됩니다)')) return;
+  DB.campaigns=DB.campaigns.filter(function(c){return c.type!==type;});
+  if(cur.campType===type){
+    var types=[...new Set(DB.campaigns.map(function(c){return c.type;}))];
+    cur.campType=types.length?types[0]:'릴스';
+  }
+  save();cur.id=null;pgCampaign();toast(type+' 삭제됨');
+}
+
 function openNewCampType(){
   om(`<div class="mh"><h3>새 캠페인 유형 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
@@ -1959,12 +2009,16 @@ function openAddCP(cid){
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" placeholder="0"></div><div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div></div>
     <div class="fr"><label>제품</label><input id="fp1" placeholder="제품명"></div>
     <div class="fr"><label>배송지</label><input id="fa" placeholder="서울시..."></div>
-    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" placeholder="30만원"></div><div class="fr"><label>업로드일/특이사항</label><input id="fn" placeholder="5/15 업로드"></div></div>`
+    <div class="fg">
+      <div class="fr"><label>발송일 <span style="color:#52B788;font-size:10px">(이카운트 출고)</span></label><input id="fsend" type="date" value="${today()}"></div>
+      <div class="fr"><label>업로드일 <span style="color:#3B82F6;font-size:10px">(콘텐츠 게시)</span></label><input id="fupload" type="date" value="${today()}"></div>
+    </div>
+    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" placeholder="30만원"></div><div class="fr"><label>비고</label><input id="fn" placeholder=""></div></div>`
     :`<div class="fr"><label>비고</label><input id="fn" placeholder=""></div><input id="fee" style="display:none">`}
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCP('${cid}')">추가</button></div>`);
 }
-function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),product:g('fp1'),address:g('fa'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),product:g('fp1'),address:g('fa'),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 function openEditCP(cid,pid){
   const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;
@@ -1975,12 +2029,16 @@ function openEditCP(cid,pid){
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div></div>
     <div class="fr"><label>제품</label><input id="fp1" value="${e(p.product)}"></div>
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
-    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" value="${e(p.fee||'')}"></div><div class="fr"><label>특이사항</label><input id="fn" value="${e(p.note||'')}"></div></div>`
+    <div class="fg">
+      <div class="fr"><label>발송일 <span style="color:#52B788;font-size:10px">(이카운트 출고)</span></label><input id="fsend" type="date" value="${p.sendDate||''}"></div>
+      <div class="fr"><label>업로드일 <span style="color:#3B82F6;font-size:10px">(콘텐츠 게시)</span></label><input id="fupload" type="date" value="${p.uploadDate||''}"></div>
+    </div>
+    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" value="${e(p.fee||'')}"></div><div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div></div>`
     :`<div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div><input id="fee" style="display:none" value="${e(p.fee||'')}">`}
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCP('${cid}','${pid}')">저장</button></div>`);
 }
-function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');p.product=g('fp1');p.address=g('fa');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');p.product=g('fp1');p.address=g('fa');p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // ══════════════════════════════
 //  UPDATE / DELETE

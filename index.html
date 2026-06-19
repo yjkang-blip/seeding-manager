@@ -404,6 +404,20 @@ function campBadges(handle){
 }
 
 // 주간에서 드롭다운으로 캠페인 추가
+function addToCampOrCollab(handle,val){
+  if(!val) return;
+  if(val.startsWith('collab:')){
+    const collabId=val.replace('collab:','');
+    const collab=(DB.collabs||[]).find(x=>x.id===collabId);
+    if(!collab){toast('협업 없음');return;}
+    // 협업에 참여자 기록 (note에 추가)
+    collab.note=(collab.note?collab.note+', ':'')+handle;
+    save();renderSB();renderPage();toast(handle+' → '+collab.brand+' '+collab.name+' 협업 추가됨');
+  } else {
+    addToCamp(handle,val);
+  }
+}
+
 function addToCamp(handle,campId){
   if(!campId) return;
   const c=DB.campaigns.find(x=>x.id===campId);if(!c)return;
@@ -1143,9 +1157,13 @@ function pgWeekly(){
         w.people.map((p,i)=>{
           const badges=campBadges(p.handle);
           const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)));
-          const dropdown=avail.length?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCamp('${p.handle}',this.value);this.value=''">
+          const availCollabs=(DB.collabs||[]).filter(c=>c.name!==p.handle);
+          const hasOpts=avail.length||availCollabs.length;
+          const collabOptGroups=availCollabs.length?'<optgroup label="zvzo/브랜더진 협업">'+availCollabs.map(c=>'<option value="collab:'+c.id+'">'+c.brand+' - '+c.name+'</option>').join('')+'</optgroup>':'';
+          const dropdown=hasOpts?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCampOrCollab('${p.handle}',this.value);this.value=''">
             <option value="">+ 캠페인 추가</option>
             ${avail.map(c=>`<option value="${c.id}">${c.name} ${c.round}차</option>`).join('')}
+            ${collabOptGroups}
           </select>`:'';
           const shipped=p.shipped;
           const rowBg=shipped?'background:#f0faf4':badges?'background:#FAFFFE':'';

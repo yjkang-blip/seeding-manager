@@ -532,19 +532,16 @@ const COST_AUTO_CATS=[
   {key:'네이버 브랜드 커넥트', fn:(t,m)=>/네이버 브랜드 커넥트/.test(m)},
   {key:'무신사', fn:(t,m)=>/무신사/.test(m)},
   {key:'zvzo', fn:(t,m)=>/zvzo/i.test(m)},
-  {key:'릴스 협업', fn:(t,m)=>/릴스 협업/.test(m)},
-  {key:'2차 활용', fn:(t,m)=>/2차\s*활용|2차\s*협업/.test(m)},
   {key:'브랜더진', fn:(t,m)=>/브랜더진/.test(m)},
   {key:'거래처증정', fn:(t,m)=>/거래처증정/.test(t)||/거래처증정/.test(m)},
   {key:'이벤트/체험단', fn:(t,m)=>/이벤트 증정/.test(t)||/카카오/.test(m)},
   {key:'샘플', fn:(t,m)=>/샘플/.test(t)||/샘플/.test(m)},
-  {key:'시딩', fn:(t,m)=>(/시딩|뉴탱글|다나야드/.test(m))&&!(/무신사|릴스 협업|2차\s*활용|2차\s*협업|브랜더진/.test(m))},
+  {key:'시딩', fn:(t,m)=>(/시딩|뉴탱글|다나야드/.test(m))&&!(/무신사|브랜더진/.test(m))},
 ];
 const COST_EXCL=['거래처증정','이벤트/체험단','샘플'];
-const COST_ORDER=['시딩','네이버 브랜드 커넥트','무신사','zvzo','릴스 협업','2차 활용','브랜더진'];
+const COST_ORDER=['시딩','네이버 브랜드 커넥트','무신사','zvzo','브랜더진'];
 let _costView='list';
 let _costCalY=new Date().getFullYear();
-let _costCalM=new Date().getMonth();
 let _costSelMonth=null;
 
 function fmtW(n){return Math.round(n).toLocaleString('ko-KR');}
@@ -569,28 +566,36 @@ function setCostView(v){_costView=v;pgCost();}
 function costGrouped(md){
   const grouped={};
   (md.rows||[]).forEach(r=>{
-    if(!grouped[r.cat]) grouped[r.cat]={qty:0,cost:0,people:0};
+    if(!grouped[r.cat]) grouped[r.cat]={qty:0,cost:0,memos:[]};
     grouped[r.cat].qty+=r.qty||0;
     grouped[r.cat].cost+=r.cost||0;
+    if(r.memo) grouped[r.cat].memos.push({memo:r.memo,qty:r.qty,cost:r.cost});
   });
-  // manual overrides
-  (md.overrides||{});
   return grouped;
 }
 
 function costCalc(md){
   const g=costGrouped(md);
   const ov=md.overrides||{};
-  const inclKeys=[...new Set([...COST_ORDER,...Object.keys(g)])].filter(k=>!COST_EXCL.includes(k)&&(g[k]||ov[k]));
-  let totalQty=0,totalPeople=md.people||0,totalEx=0;
-  inclKeys.forEach(k=>{
+  const allCats=[...new Set([...COST_ORDER,...Object.keys(g)])].filter(k=>!COST_EXCL.includes(k));
+  let totalQty=0,totalEx=0;
+  allCats.forEach(k=>{
     const qty=ov[k]?.qty!=null?ov[k].qty:(g[k]?.qty||0);
     const cost=ov[k]?.cost!=null?ov[k].cost:(g[k]?.cost||0);
     totalQty+=qty; totalEx+=cost;
   });
   const extraEx=(md.extra||[]).reduce((s,e)=>s+(e.vatEx||0),0);
   const extraInc=(md.extra||[]).reduce((s,e)=>s+(e.vatInc||0),0);
-  return {g,ov,inclKeys,totalQty,totalPeople,totalEx,extraEx,extraInc,grandEx:totalEx+extraEx,grandInc:totalEx*1.1+extraInc};
+  return {g,ov,allCats,totalQty,totalPeople:md.people||0,totalEx,extraEx,extraInc,grandEx:totalEx+extraEx,grandInc:totalEx*1.1+extraInc};
+}
+
+// ── 저장 토스트 ──
+function costSave(){
+  // 자동저장 안함 - 저장 버튼으로만
+}
+function costManualSave(month){
+  save();
+  toast('저장됐어요 ✓');
 }
 
 // ────────────────────────────────
@@ -614,32 +619,26 @@ function pgCostList(){
   </div>
   <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
     <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:800px">
       <thead><tr style="background:#f9f9f9">
-        <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">월</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">인원</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">수량</th>
+        <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">월</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">인원</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">수량</th>
         ${COST_ORDER.map(k=>`<th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">${k}</th>`).join('')}
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">유가비용</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">VAT-</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">VAT+</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">유가비용</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT-</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT+</th>
         <th style="padding:10px 8px;border-bottom:1px solid #e8e8e8"></th>
       </tr></thead>
       <tbody>
         ${months.map(md=>{
           const c=costCalc(md);
-          const getVal=(k,type)=>{
-            const ov=md.overrides||{};
-            const g=c.g;
-            if(type==='qty') return ov[k]?.qty!=null?ov[k].qty:(g[k]?.qty||0);
-            return ov[k]?.cost!=null?ov[k].cost:(g[k]?.cost||0);
-          };
           return `<tr style="border-bottom:1px solid #e8e8e8;cursor:pointer" onclick="costOpenMonth('${md.month}')" onmouseover="this.style.background='#f8fbf8'" onmouseout="this.style.background=''">
             <td style="padding:11px 14px;font-weight:600">${md.month}</td>
             <td style="padding:11px 10px;text-align:right">${c.totalPeople?fmtW(c.totalPeople)+'명':'-'}</td>
             <td style="padding:11px 10px;text-align:right">${fmtW(c.totalQty)}개</td>
             ${COST_ORDER.map(k=>{
-              const qty=getVal(k,'qty');
+              const qty=(c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0));
               return `<td style="padding:11px 10px;text-align:right;color:${qty?'#111':'#ccc'}">${qty?fmtW(qty)+'개':'-'}</td>`;
             }).join('')}
             <td style="padding:11px 10px;text-align:right;color:${c.extraEx?'#111':'#ccc'}">${c.extraEx?fmtC(c.extraEx):'-'}</td>
@@ -678,21 +677,16 @@ function pgCostCal(){
     if(md){card.onmouseover=()=>card.style.background='#f8fbf8';card.onmouseout=()=>card.style.background='#fff';card.onclick=()=>costOpenMonth(monthStr);}
     if(md){
       const c=costCalc(md);
-      const bars=COST_ORDER.filter(k=>{
-        const ov=md.overrides||{};
-        const qty=ov[k]?.qty!=null?ov[k].qty:(c.g[k]?.qty||0);
-        return qty>0;
-      }).slice(0,4);
+      const bars=COST_ORDER.filter(k=>(c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0))>0).slice(0,4);
       card.innerHTML=`
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <span style="font-size:13px;font-weight:700">${MNAMES[mi]}</span>
-          <div style="text-align:right"><div style="font-size:10px;color:#aaa">${c.totalPeople?c.totalPeople+'명 · ':''}</div><div style="font-size:10px;color:#888">${fmtW(c.totalQty)}개</div></div>
+          <div style="text-align:right;font-size:10px;color:#888">${c.totalPeople?c.totalPeople+'명 · ':''}${fmtW(c.totalQty)}개</div>
         </div>
         <div style="font-size:17px;font-weight:700;color:#1D4E3A;margin-bottom:8px">${fmtC(c.grandEx)}</div>
         <div style="display:flex;flex-direction:column;gap:3px">
           ${bars.map(k=>{
-            const ov=md.overrides||{};
-            const qty=ov[k]?.qty!=null?ov[k].qty:(c.g[k]?.qty||0);
+            const qty=c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0);
             return `<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#666">${k}</span><span style="font-weight:600">${fmtW(qty)}개</span></div>`;
           }).join('')}
         </div>`;
@@ -706,7 +700,7 @@ function pgCostCal(){
 }
 
 // ────────────────────────────────
-//  MONTH DETAIL MODAL (수정 가능)
+//  MONTH DETAIL MODAL
 // ────────────────────────────────
 function costOpenMonth(month){
   _costSelMonth=month;
@@ -719,18 +713,17 @@ function _renderCostModal(md){
   const month=md.month;
   const c=costCalc(md);
   const ov=md.overrides||{};
-
-  // 모든 채널 (자동+수동 추가된 것)
-  const allCats=[...new Set([...COST_ORDER,...Object.keys(c.g)])].filter(k=>!COST_EXCL.includes(k));
   const exclCats=Object.keys(c.g).filter(k=>COST_EXCL.includes(k));
+  const allCats=[...new Set([...COST_ORDER,...c.allCats])].filter(k=>!COST_EXCL.includes(k));
 
   const modal=document.getElementById('modal');
-  modal.style.cssText='background:#fff;border-radius:14px;width:min(860px,96vw);max-height:90vh;overflow-y:auto;padding:24px;';
+  modal.style.cssText='background:#fff;border-radius:14px;width:min(900px,96vw);max-height:90vh;overflow-y:auto;padding:24px;';
   modal.innerHTML=`
+  <!-- 헤더 -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <div>
       <div style="font-size:17px;font-weight:700">${month} 현물 정산</div>
-      <div style="font-size:12px;color:#888;margin-top:2px">셀 클릭해서 직접 수정 가능</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">수정 후 저장 버튼을 눌러주세요</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label style="padding:6px 14px;border:1px solid #e8e8e8;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;background:#fff;display:inline-flex;align-items:center;gap:5px">
@@ -738,12 +731,13 @@ function _renderCostModal(md){
         <input type="file" accept=".xlsx" style="display:none" onchange="costParseXlsx(this,'${month}')">
       </label>
       <button onclick="costAddCatRow('${month}')" style="padding:6px 12px;border:1px solid #e8e8e8;border-radius:7px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit">＋ 채널 추가</button>
+      <button onclick="costManualSave('${month}')" style="padding:6px 14px;border:none;border-radius:7px;font-size:12px;cursor:pointer;background:#1D4E3A;color:#fff;font-family:inherit;font-weight:600">💾 저장</button>
       <button onclick="costDelMonth('${month}')" style="padding:6px 12px;border:1px solid #fca5a5;border-radius:7px;font-size:12px;cursor:pointer;color:#b91c1c;background:#fff1f1;font-family:inherit">삭제</button>
       <button onclick="document.getElementById('ov').style.display='none'" style="padding:6px 12px;border:1px solid #e8e8e8;border-radius:7px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit">닫기</button>
     </div>
   </div>
 
-  <!-- 인원/수량 요약 -->
+  <!-- 요약 카드 -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
     <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px">
       <div style="font-size:11px;color:#888;margin-bottom:6px">인원 (직접 입력)</div>
@@ -765,45 +759,57 @@ function _renderCostModal(md){
     </div>
   </div>
 
-  <!-- 현물 채널별 테이블 (수정 가능) -->
+  <!-- 현물 채널별 -->
   <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden;margin-bottom:12px">
     <div style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;font-weight:700">현물 채널별</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#f9f9f9">
-        <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">채널</th>
-        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">수량 (개)</th>
-        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">원가 VAT- (원)</th>
+        <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;width:32%">채널</th>
+        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">수량</th>
+        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">원가 VAT-</th>
         <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">원가 VAT+</th>
-        <th style="padding:8px 8px;border-bottom:1px solid #e8e8e8"></th>
+        <th style="padding:8px 8px;border-bottom:1px solid #e8e8e8;width:30px"></th>
       </tr></thead>
       <tbody id="cm-cat-tbody">
         ${allCats.map(k=>{
           const qty=ov[k]?.qty!=null?ov[k].qty:(c.g[k]?.qty||0);
           const cost=ov[k]?.cost!=null?ov[k].cost:(c.g[k]?.cost||0);
-          const isManual=!c.g[k]&&ov[k];
+          const memos=c.g[k]?.memos||[];
+          const memosHtml=memos.length>0?`
+            <tr id="memo-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}" style="display:none;background:#fafafa">
+              <td colspan="5" style="padding:8px 14px 10px 28px">
+                <div style="font-size:11px;color:#888;margin-bottom:4px">적요 내역</div>
+                ${memos.map(m=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
+                  <span style="color:#555">${m.memo}</span>
+                  <span style="color:#888;white-space:nowrap;margin-left:12px">${fmtW(m.qty)}개 · ${fmtC(m.cost)}</span>
+                </div>`).join('')}
+              </td>
+            </tr>`:'';
           return `<tr style="border-bottom:1px solid #e8e8e8" id="cmrow-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}">
             <td style="padding:8px 14px">
-              <span contenteditable="false" style="font-size:13px">${k}</span>
-              ${isManual?'<span style="font-size:10px;color:#aaa;margin-left:4px">수동</span>':''}
+              <div style="display:flex;align-items:center;gap:6px">
+                ${memos.length>0?`<button onclick="costToggleMemo('${k.replace(/'/g,"\\'")}','${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}')" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:12px;padding:0;line-height:1" id="memo-btn-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}">▶</button>`:'<span style="width:16px"></span>'}
+                <span style="font-size:13px">${k}</span>
+              </div>
             </td>
             <td style="padding:4px 10px;text-align:right">
               <input type="number" value="${qty||''}" placeholder="0" min="0"
-                style="width:80px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 8px;font-size:13px;text-align:right;font-family:inherit"
+                style="width:75px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 7px;font-size:13px;text-align:right;font-family:inherit"
                 onchange="costSetOverride('${month}','${k}','qty',this.value)">
             </td>
             <td style="padding:4px 10px;text-align:right">
               <input type="number" value="${cost||''}" placeholder="0" min="0"
-                style="width:110px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 8px;font-size:13px;text-align:right;font-family:inherit"
+                style="width:110px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 7px;font-size:13px;text-align:right;font-family:inherit"
                 onchange="costSetOverride('${month}','${k}','cost',this.value)">
             </td>
-            <td style="padding:8px 10px;text-align:right;color:#aaa;font-size:12px">${cost?fmtC(cost*1.1):'-'}</td>
+            <td style="padding:8px 10px;text-align:right;color:#aaa;font-size:12px" id="vat-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}">${cost?fmtC(cost*1.1):'-'}</td>
             <td style="padding:8px 8px;text-align:center">
-              <button onclick="costRemoveCat('${month}','${k}')" style="padding:2px 8px;border:1px solid #e8e8e8;border-radius:4px;font-size:11px;cursor:pointer;color:#999;background:#fff;font-family:inherit">×</button>
+              <button onclick="costRemoveCat('${month}','${k}')" style="padding:2px 7px;border:1px solid #e8e8e8;border-radius:4px;font-size:11px;cursor:pointer;color:#999;background:#fff;font-family:inherit">×</button>
             </td>
-          </tr>`;
+          </tr>${memosHtml}`;
         }).join('')}
         ${exclCats.map(k=>`<tr style="border-bottom:1px solid #e8e8e8;opacity:.4">
-          <td style="padding:8px 14px">${k} <span style="font-size:10px;background:#f0f0f0;padding:1px 5px;border-radius:4px">합계제외</span></td>
+          <td style="padding:8px 14px;padding-left:28px">${k} <span style="font-size:10px;background:#f0f0f0;padding:1px 5px;border-radius:4px">합계제외</span></td>
           <td style="padding:8px 10px;text-align:right">${fmtW(c.g[k]?.qty||0)}</td>
           <td style="padding:8px 10px;text-align:right">${fmtC(c.g[k]?.cost||0)}</td>
           <td style="padding:8px 10px;text-align:right;color:#aaa">${fmtC((c.g[k]?.cost||0)*1.1)}</td>
@@ -813,49 +819,9 @@ function _renderCostModal(md){
           <td style="padding:9px 14px">소계</td>
           <td style="padding:9px 10px;text-align:right" id="cm-sub-qty">${fmtW(c.totalQty)}개</td>
           <td style="padding:9px 10px;text-align:right" id="cm-sub-ex">${fmtC(c.totalEx)}</td>
-          <td style="padding:9px 10px;text-align:right;color:#aaa" id="cm-sub-inc">${fmtC(c.totalEx*1.1)}</td>
+          <td style="padding:9px 10px;text-align:right;color:#aaa">${fmtC(c.totalEx*1.1)}</td>
           <td></td>
         </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- 유가 비용 -->
-  <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden;margin-bottom:12px">
-    <div style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center">
-      유가 비용 (릴스협업·2차활용 광고비)
-      <button onclick="costAddExtra('${month}')" style="padding:4px 10px;border:1px solid #e8e8e8;border-radius:6px;font-size:11px;cursor:pointer;background:#fff;font-family:inherit">＋ 추가</button>
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="background:#f9f9f9">
-        <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">내역</th>
-        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT-</th>
-        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT+</th>
-        <th style="padding:8px 8px;border-bottom:1px solid #e8e8e8"></th>
-      </tr></thead>
-      <tbody id="cm-extra-tbody">
-        ${(md.extra||[]).length===0
-          ?'<tr><td colspan="4" style="padding:16px;text-align:center;color:#aaa;font-size:12px">없음</td></tr>'
-          :(md.extra||[]).map((e,i)=>`<tr style="border-bottom:1px solid #e8e8e8">
-            <td style="padding:8px 14px">
-              <input type="text" value="${e.label}" style="border:none;background:transparent;font-size:13px;font-family:inherit;width:100%;min-width:180px" onchange="costEditExtra('${month}',${i},'label',this.value)">
-            </td>
-            <td style="padding:4px 10px;text-align:right">
-              <input type="number" value="${e.vatEx}" style="width:100px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 8px;font-size:13px;text-align:right;font-family:inherit" onchange="costEditExtra('${month}',${i},'vatEx',this.value)">
-            </td>
-            <td style="padding:4px 10px;text-align:right">
-              <input type="number" value="${e.vatInc}" style="width:100px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 8px;font-size:13px;text-align:right;font-family:inherit" onchange="costEditExtra('${month}',${i},'vatInc',this.value)">
-            </td>
-            <td style="padding:8px 8px;text-align:center">
-              <button onclick="costDelExtra('${month}',${i})" style="padding:2px 8px;border:1px solid #fca5a5;border-radius:4px;font-size:11px;cursor:pointer;color:#b91c1c;background:#fff1f1;font-family:inherit">삭제</button>
-            </td>
-          </tr>`).join('')}
-        ${(md.extra||[]).length>0?`<tr style="background:#f9f9f9;font-weight:700">
-          <td style="padding:9px 14px">소계</td>
-          <td style="padding:9px 10px;text-align:right">${fmtC(c.extraEx)}</td>
-          <td style="padding:9px 10px;text-align:right">${fmtC(c.extraInc)}</td>
-          <td></td>
-        </tr>`:''}
       </tbody>
     </table>
   </div>
@@ -884,22 +850,86 @@ function _renderCostModal(md){
     </table>
   </div>`:''}
 
+  <!-- 유가 비용 -->
+  <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden;margin-bottom:12px">
+    <div style="padding:10px 14px;border-bottom:1px solid #e8e8e8;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center">
+      유가 비용 (릴스협업·2차활용 광고비)
+      <button onclick="costAddExtra('${month}')" style="padding:4px 10px;border:1px solid #e8e8e8;border-radius:6px;font-size:11px;cursor:pointer;background:#fff;font-family:inherit">＋ 추가</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#f9f9f9">
+        <th style="padding:8px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">내역</th>
+        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT-</th>
+        <th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT+</th>
+        <th style="padding:8px 8px;border-bottom:1px solid #e8e8e8"></th>
+      </tr></thead>
+      <tbody>
+        ${(md.extra||[]).length===0
+          ?'<tr><td colspan="4" style="padding:16px;text-align:center;color:#aaa;font-size:12px">없음</td></tr>'
+          :(md.extra||[]).map((e,i)=>`<tr style="border-bottom:1px solid #e8e8e8">
+            <td style="padding:6px 14px">
+              <input type="text" value="${e.label}" style="border:none;background:transparent;font-size:13px;font-family:inherit;width:100%;min-width:160px" onchange="costEditExtra('${month}',${i},'label',this.value)">
+            </td>
+            <td style="padding:4px 10px;text-align:right">
+              <input type="number" value="${e.vatEx}" style="width:100px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 7px;font-size:13px;text-align:right;font-family:inherit" onchange="costEditExtra('${month}',${i},'vatEx',this.value)">
+            </td>
+            <td style="padding:4px 10px;text-align:right">
+              <input type="number" value="${e.vatInc}" style="width:100px;border:1px solid #e8e8e8;border-radius:5px;padding:4px 7px;font-size:13px;text-align:right;font-family:inherit" onchange="costEditExtra('${month}',${i},'vatInc',this.value)">
+            </td>
+            <td style="padding:8px 8px;text-align:center">
+              <button onclick="costDelExtra('${month}',${i})" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;font-size:11px;cursor:pointer;color:#b91c1c;background:#fff1f1;font-family:inherit">삭제</button>
+            </td>
+          </tr>`).join('')}
+        ${(md.extra||[]).length>0?`<tr style="background:#f9f9f9;font-weight:700">
+          <td style="padding:9px 14px">소계</td>
+          <td style="padding:9px 10px;text-align:right">${fmtC(c.extraEx)}</td>
+          <td style="padding:9px 10px;text-align:right">${fmtC(c.extraInc)}</td>
+          <td></td>
+        </tr>`:''}
+      </tbody>
+    </table>
+  </div>
+
   <!-- TTL -->
-  <div style="background:#1D4E3A;color:#fff;border-radius:10px;padding:14px 18px;display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+  <div style="background:#1D4E3A;color:#fff;border-radius:10px;padding:14px 18px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
     <span style="font-size:13px;font-weight:700;flex:1">${month} TTL</span>
-    ${md.people?`<div style="text-align:right"><div style="font-size:10px;opacity:.6">인원</div><div style="font-size:16px;font-weight:700">${fmtW(md.people)}명</div></div>`:''}
-    <div style="text-align:right"><div style="font-size:10px;opacity:.6">수량</div><div style="font-size:16px;font-weight:700">${fmtW(c.totalQty)}개</div></div>
-    <div style="text-align:right"><div style="font-size:10px;opacity:.6">VAT-</div><div style="font-size:16px;font-weight:700">${fmtC(c.grandEx)}</div></div>
-    <div style="text-align:right"><div style="font-size:10px;opacity:.6">VAT+</div><div style="font-size:16px;font-weight:700">${fmtC(c.grandInc)}</div></div>
+    ${md.people?`<div style="text-align:right"><div style="font-size:10px;opacity:.6">인원</div><div style="font-size:15px;font-weight:700">${fmtW(md.people)}명</div></div>`:''}
+    <div style="text-align:right"><div style="font-size:10px;opacity:.6">수량</div><div style="font-size:15px;font-weight:700" id="cm-ttl-qty">${fmtW(c.totalQty)}개</div></div>
+    <div style="text-align:right"><div style="font-size:10px;opacity:.6">VAT-</div><div style="font-size:15px;font-weight:700" id="cm-ttl-ex">${fmtC(c.grandEx)}</div></div>
+    <div style="text-align:right"><div style="font-size:10px;opacity:.6">VAT+</div><div style="font-size:15px;font-weight:700" id="cm-ttl-inc">${fmtC(c.grandInc)}</div></div>
   </div>`;
 
   document.getElementById('ov').style.display='flex';
 }
 
+function costToggleMemo(cat,safeKey){
+  const row=document.getElementById('memo-'+safeKey);
+  const btn=document.getElementById('memo-btn-'+safeKey);
+  if(!row) return;
+  const open=row.style.display==='none'||row.style.display==='';
+  row.style.display=open?'table-row':'none';
+  if(btn) btn.textContent=open?'▼':'▶';
+}
+
 // ── 수정 함수들 ──
+function _costRefreshTTL(md){
+  const c=costCalc(md);
+  const ids={
+    'cm-total-qty':fmtW(c.totalQty)+'개',
+    'cm-sub-qty':fmtW(c.totalQty)+'개',
+    'cm-sub-ex':fmtC(c.totalEx),
+    'cm-grand-ex':fmtC(c.grandEx),
+    'cm-grand-inc':fmtC(c.grandInc),
+    'cm-ttl-qty':fmtW(c.totalQty)+'개',
+    'cm-ttl-ex':fmtC(c.grandEx),
+    'cm-ttl-inc':fmtC(c.grandInc),
+  };
+  Object.entries(ids).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.textContent=val;});
+}
+
 function costSetPeople(month,val){
   const md=DB.cost.find(x=>x.month===month);if(!md)return;
-  md.people=parseInt(val)||0;save();
+  md.people=parseInt(val)||0;costSave();
 }
 
 function costSetOverride(month,cat,field,val){
@@ -907,18 +937,12 @@ function costSetOverride(month,cat,field,val){
   if(!md.overrides)md.overrides={};
   if(!md.overrides[cat])md.overrides[cat]={};
   md.overrides[cat][field]=parseInt(val)||0;
-  save();
-  // TTL 업데이트
-  const c=costCalc(md);
-  const el=document.getElementById('cm-grand-ex');if(el)el.textContent=fmtC(c.grandEx);
-  const el2=document.getElementById('cm-grand-inc');if(el2)el2.textContent=fmtC(c.grandInc);
-  const el3=document.getElementById('cm-total-qty');if(el3)el3.textContent=fmtW(c.totalQty)+'개';
-  const el4=document.getElementById('cm-sub-qty');if(el4)el4.textContent=fmtW(c.totalQty)+'개';
-  const el5=document.getElementById('cm-sub-ex');if(el5)el5.textContent=fmtC(c.totalEx);
-  // VAT+ 셀 업데이트
+  costSave();
+  _costRefreshTTL(md);
   if(field==='cost'){
-    const row=document.getElementById('cmrow-'+cat.replace(/[^a-zA-Z0-9가-힣]/g,'_'));
-    if(row){const cells=row.querySelectorAll('td');if(cells[3])cells[3].textContent=parseInt(val)?fmtC(parseInt(val)*1.1):'-';}
+    const safeKey=cat.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+    const el=document.getElementById('vat-'+safeKey);
+    if(el)el.textContent=parseInt(val)?fmtC(parseInt(val)*1.1):'-';
   }
 }
 
@@ -927,28 +951,20 @@ function costAddCatRow(month){
   const md=DB.cost.find(x=>x.month===month);if(!md)return;
   if(!md.overrides)md.overrides={};
   md.overrides[cat.trim()]={qty:0,cost:0};
-  save();_renderCostModal(md);
+  costSave();_renderCostModal(md);
 }
 
 function costRemoveCat(month,cat){
   const md=DB.cost.find(x=>x.month===month);if(!md)return;
-  // 자동 분류된 것은 제외 목록에 추가
-  if(!md.excludedCats)md.excludedCats=[];
-  if(!md.excludedCats.includes(cat))md.excludedCats.push(cat);
-  // 오버라이드도 삭제
-  if(md.overrides&&md.overrides[cat])delete md.overrides[cat];
-  // rows에서도 제거
   md.rows=(md.rows||[]).filter(r=>r.cat!==cat);
-  save();_renderCostModal(md);
+  if(md.overrides&&md.overrides[cat])delete md.overrides[cat];
+  costSave();_renderCostModal(md);
 }
 
 function costEditExtra(month,idx,field,val){
   const md=DB.cost.find(x=>x.month===month);if(!md||!md.extra||!md.extra[idx])return;
   md.extra[idx][field]=field==='label'?val:(parseInt(val)||0);
-  save();
-  const c=costCalc(md);
-  const el=document.getElementById('cm-grand-ex');if(el)el.textContent=fmtC(c.grandEx);
-  const el2=document.getElementById('cm-grand-inc');if(el2)el2.textContent=fmtC(c.grandInc);
+  costSave();_costRefreshTTL(md);
 }
 
 function costAddExtra(month){
@@ -960,12 +976,12 @@ function costAddExtra(month){
   const md=DB.cost.find(x=>x.month===month);if(!md)return;
   if(!md.extra)md.extra=[];
   md.extra.push({label,vatEx,vatInc});
-  save();_renderCostModal(md);
+  costSave();_renderCostModal(md);
 }
 
 function costDelExtra(month,idx){
   const md=DB.cost.find(x=>x.month===month);if(!md||!md.extra)return;
-  md.extra.splice(idx,1);save();_renderCostModal(md);
+  md.extra.splice(idx,1);costSave();_renderCostModal(md);
 }
 
 function costAssignCat(month,idx,cat){
@@ -973,7 +989,7 @@ function costAssignCat(month,idx,cat){
   const u=md.uncat[idx];
   md.rows.push({memo:u.memo,cat,qty:u.qty,cost:u.cost});
   md.uncat.splice(idx,1);
-  save();_renderCostModal(md);
+  costSave();_renderCostModal(md);
 }
 
 function costAddMonth(){
@@ -984,15 +1000,15 @@ function costAddMonth(){
   if(!DB.cost)DB.cost=[];
   if(DB.cost.find(x=>x.month===m)){toast('이미 있는 월이에요');costOpenMonth(m);return;}
   DB.cost.push({month:m,rows:[],extra:[],uncat:[],overrides:{},people:0});
-  save();toast(`${m} 추가됨`);
-  _costCalY=parseInt(m.slice(0,4));_costCalM=parseInt(m.slice(5))-1;
+  costSave();toast(`${m} 추가됨`);
+  _costCalY=parseInt(m.slice(0,4));
   pgCost();costOpenMonth(m);
 }
 
 function costDelMonth(month){
   if(!confirm(`${month} 데이터를 삭제할까요?`))return;
   DB.cost=DB.cost.filter(x=>x.month!==month);
-  save();document.getElementById('ov').style.display='none';pgCost();toast('삭제됨');
+  costSave();document.getElementById('ov').style.display='none';pgCost();toast('삭제됨');
 }
 
 function costParseXlsx(input,month){
@@ -1023,7 +1039,7 @@ function costParseXlsx(input,month){
         else uncat.push({memo,qty:d.qty,cost:d.cost});
       });
       const md=DB.cost.find(x=>x.month===month);
-      if(md){md.rows=rows;md.uncat=uncat;md.overrides={};save();toast('업로드 완료!');_renderCostModal(md);}
+      if(md){md.rows=rows;md.uncat=uncat;md.overrides={};costSave();toast('업로드 완료!');_renderCostModal(md);}
     }catch(err){toast('파일 오류: '+err.message);}
   };
   reader.readAsArrayBuffer(file);

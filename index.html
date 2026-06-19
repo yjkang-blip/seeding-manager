@@ -407,12 +407,13 @@ function campBadges(handle){
 function addToCampOrCollab(handle,val){
   if(!val) return;
   if(val.startsWith('collab:')){
-    const collabId=val.replace('collab:','');
-    const collab=(DB.collabs||[]).find(x=>x.id===collabId);
-    if(!collab){toast('협업 없음');return;}
-    // 협업에 참여자 기록 (note에 추가)
-    collab.note=(collab.note?collab.note+', ':'')+handle;
-    save();renderSB();renderPage();toast(handle+' → '+collab.brand+' '+collab.name+' 협업 추가됨');
+    const brand=val.replace('collab:','');
+    // 주간 인원 type에 협업 표시
+    DB.weekly.forEach(function(w){
+      const person=w.people.find(function(p){return normH(p.handle)===normH(handle);});
+      if(person) person.type=brand+' 협업';
+    });
+    save();renderSB();renderPage();toast(handle+' → '+brand+' 협업 추가됨');
   } else {
     addToCamp(handle,val);
   }
@@ -1158,12 +1159,13 @@ function pgWeekly(){
           const badges=campBadges(p.handle);
           const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)));
           const availCollabs=(DB.collabs||[]).filter(c=>c.name!==p.handle);
+          const collabBrands=[...new Set(availCollabs.map(c=>c.brand))];
+          const collabOpts=collabBrands.map(b=>'<option value="collab:'+b+'">'+b+' 협업</option>').join('');
           const hasOpts=avail.length||availCollabs.length;
-          const collabOptGroups=availCollabs.length?'<optgroup label="zvzo/브랜더진 협업">'+availCollabs.map(c=>'<option value="collab:'+c.id+'">'+c.brand+' - '+c.name+'</option>').join('')+'</optgroup>':'';
           const dropdown=hasOpts?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCampOrCollab('${p.handle}',this.value);this.value=''">
             <option value="">+ 캠페인 추가</option>
             ${avail.map(c=>`<option value="${c.id}">${c.name} ${c.round}차</option>`).join('')}
-            ${collabOptGroups}
+            ${collabOpts}
           </select>`:'';
           const shipped=p.shipped;
           const rowBg=shipped?'background:#f0faf4':badges?'background:#FAFFFE':'';

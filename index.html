@@ -396,11 +396,22 @@ function toast(msg){const el=document.getElementById('toast');el.textContent=msg
 // 캠페인 참여 배지 (핸들 기준)
 function campBadges(handle){
   const key=normH(handle);
-  return DB.campaigns.filter(c=>c.people.some(p=>normH(p.handle)===key)).map(c=>{
+  const campBadgeHtml=DB.campaigns.filter(c=>c.people.some(p=>normH(p.handle)===key)).map(c=>{
     const col=c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':
-              c.type==='릴스'?'background:#EEF2FF;color:#3730A3':'background:#FEF3C7;color:#92400E';
+              c.type==='릴스'?'background:#EEF2FF;color:#3730A3':
+              c.type==='zvzo 협업'?'background:#EDE9FE;color:#5B21B6':
+              c.type==='브랜더진 협업'?'background:#FEF3C7;color:#92400E':
+              c.type==='브랜디드'?'background:#FEE2E2;color:#991B1B':
+              c.type==='유튜브'?'background:#FEF9C3;color:#854D0E':
+              'background:#F1F5F9;color:#475569';
     return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-block;margin:1px">${c.name} ${c.round}차</span>`;
   }).join('');
+  // collab 딱지
+  const collabBadgeHtml=DB.weekly.flatMap(w=>w.people).filter(p=>normH(p.handle)===key&&(p.collabTags||[]).length)
+    .flatMap(p=>p.collabTags||[]).filter((v,i,a)=>a.indexOf(v)===i)
+    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-block;margin:1px">'+b+' 협업</span>')
+    .join('');
+  return campBadgeHtml+collabBadgeHtml||'';
 }
 
 // 주간에서 드롭다운으로 캠페인 추가
@@ -408,12 +419,16 @@ function addToCampOrCollab(handle,val){
   if(!val) return;
   if(val.startsWith('collab:')){
     const brand=val.replace('collab:','');
-    // 주간 인원 type에 협업 표시
+    // 주간 인원에 협업 딱지 추가 (campaigns 연결과 별도)
     DB.weekly.forEach(function(w){
-      const person=w.people.find(function(p){return normH(p.handle)===normH(handle);});
-      if(person) person.type=brand+' 협업';
+      w.people.forEach(function(p){
+        if(normH(p.handle)===normH(handle)){
+          if(!p.collabTags) p.collabTags=[];
+          if(!p.collabTags.includes(brand)) p.collabTags.push(brand);
+        }
+      });
     });
-    save();renderSB();renderPage();toast(handle+' → '+brand+' 협업 추가됨');
+    save();renderSB();renderPage();toast(handle+' → '+brand+' 협업 딱지 추가됨');
   } else {
     addToCamp(handle,val);
   }

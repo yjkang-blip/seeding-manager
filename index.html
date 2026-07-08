@@ -206,6 +206,12 @@ document.addEventListener('mousemove',e=>{
   if(Math.abs(e.clientX-_dragStartX)>5||Math.abs(e.clientY-_dragStartY)>5) _isDragging=true;
 });
 document.addEventListener('mouseup',()=>{setTimeout(()=>{_isDragging=false;},50);});
+document.addEventListener('touchstart',e=>{const t=e.touches[0];_dragStartX=t.clientX;_dragStartY=t.clientY;_isDragging=false;},{passive:true});
+document.addEventListener('touchmove',e=>{
+  const t=e.touches[0];
+  if(Math.abs(t.clientX-_dragStartX)>5||Math.abs(t.clientY-_dragStartY)>5) _isDragging=true;
+},{passive:true});
+document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
 var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[]};
 var cur={tab:'dash',campType:'릴스',id:null};
 let _uid=100;
@@ -404,14 +410,30 @@ function campBadges(handle){
               c.type==='브랜디드'?'background:#FEE2E2;color:#991B1B':
               c.type==='유튜브'?'background:#FEF9C3;color:#854D0E':
               'background:#F1F5F9;color:#475569';
-    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-block;margin:1px">${c.name} ${c.round}차</span>`;
+    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">${c.name} ${c.round}차<span onclick="event.stopPropagation();unlinkCampBadge('${c.id}','${e(handle)}')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>`;
   }).join('');
   // collab 딱지
   const collabBadgeHtml=DB.weekly.flatMap(w=>w.people).filter(p=>normH(p.handle)===key&&(p.collabTags||[]).length)
     .flatMap(p=>p.collabTags||[]).filter((v,i,a)=>a.indexOf(v)===i)
-    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-block;margin:1px">'+b+' 협업</span>')
+    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">'+b+' 협업<span onclick="event.stopPropagation();unlinkCollabBadge(\''+e(handle)+'\',\''+b+'\')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>')
     .join('');
   return campBadgeHtml+collabBadgeHtml||'';
+}
+
+// 잘못 붙은 캠페인 딱지 연결 해제 (핸들 표기 차이로 오매칭된 경우 포함)
+function unlinkCampBadge(campId,handle){
+  if(!confirm('이 캠페인 딱지를 해제할까요? (캠페인 자체의 인원 데이터에서 이 활동명이 제거됩니다)'))return;
+  const c=DB.campaigns.find(x=>x.id===campId);if(!c)return;
+  const key=normH(handle);
+  c.people=c.people.filter(p=>normH(p.handle)!==key);
+  save();renderSB();renderPage();toast('캠페인 딱지 해제됨');
+}
+function unlinkCollabBadge(handle,brand){
+  const key=normH(handle);
+  DB.weekly.forEach(w=>w.people.forEach(p=>{
+    if(normH(p.handle)===key&&p.collabTags){p.collabTags=p.collabTags.filter(t=>t!==brand);}
+  }));
+  save();renderSB();renderPage();toast('협업 딱지 해제됨');
 }
 
 // 주간에서 드롭다운으로 캠페인 추가
@@ -1168,8 +1190,8 @@ function pgWeekly(){
   <div class="tw">
     <div class="tw-h"><h3>${getMonthRound(w.id)} 주간 시딩 리스트</h3><span class="sub">${w.date} · 총 ${w.people.length}명 · 배송완료 ${w.people.filter(p=>p.shipped).length}명</span></div>
     <div class="tsc"><table>
-      <thead><tr><th>#</th><th>배송 상태</th><th>활동명</th><th>캠페인</th><th>채널 URL</th><th>팔로워</th><th>제품</th><th>컨택 포인트</th><th>전화번호</th><th>배송지</th><th>유형</th><th>비고</th><th></th></tr></thead>
-      <tbody>${w.people.length===0?`<tr><td colspan="13" class="nodata">인원 추가 또는 📋 붙여넣기를 이용하세요</td></tr>`:
+      <thead><tr><th>#</th><th>배송 상태</th><th>활동명</th><th>캠페인</th><th>채널 URL</th><th>팔로워</th><th>제품</th><th>컨택 포인트</th><th>전화번호</th><th>발송일</th><th>업로드일</th><th>배송지</th><th>유형</th><th>비고</th><th></th></tr></thead>
+      <tbody>${w.people.length===0?`<tr><td colspan="15" class="nodata">인원 추가 또는 📋 붙여넣기를 이용하세요</td></tr>`:
         w.people.map((p,i)=>{
           const badges=campBadges(p.handle);
           const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)));
@@ -1384,13 +1406,15 @@ function pgCampaign(){
     <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${c.name} ${c.round}차</h3><span class="sub">총 ${c.people.length}명${cur.campType==='릴스'?' · '+totalFee+'만원':''}</span></div>
     <div class="tsc"><table>
       <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>발송일</th><th>업로드일</th><th>연락처</th><th>배송지</th>${cur.campType==='릴스'?'<th>비용</th>':''}<th>비고</th><th></th></tr></thead>
-      <tbody>${c.people.length===0?`<tr><td colspan="9" class="nodata">인원을 추가해주세요</td></tr>`:
+      <tbody>${c.people.length===0?`<tr><td colspan="11" class="nodata">인원을 추가해주세요</td></tr>`:
         c.people.map((p,i)=>`<tr>
           <td style="color:#ccc">${i+1}</td>
           <td style="font-weight:700">${e(p.handle)}</td>
           <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
           <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
           <td style="max-width:160px;font-size:11px">${e(p.product)||'<span style="color:#bbb">미정</span>'}</td>
+          <td style="font-size:11px;color:#52B788">${p.sendDate||'-'}</td>
+          <td style="font-size:11px;color:#3B82F6">${p.uploadDate||'-'}</td>
           <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
           <td style="font-size:11px;color:#666;max-width:150px">${p.address?e(p.address):'<span style="color:#bbb">미입력</span>'}</td>
           ${cur.campType==='릴스'?`<td><span class="tag t-fe">${e(p.fee)||'-'}</span></td>`:''}
@@ -1590,7 +1614,7 @@ function saveExpContent(repId){
 // ══════════════════════════════
 const om=html=>{document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('open');};
 const cm=()=>document.getElementById('ov').classList.remove('open');
-document.getElementById('ov').addEventListener('click',ev=>{if(ev.target===document.getElementById('ov'))cm();});
+document.getElementById('ov').addEventListener('click',ev=>{if(ev.target===document.getElementById('ov')&&!_isDragging)cm();});
 
 // 주간 추가
 function openAddW(){

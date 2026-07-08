@@ -63,6 +63,9 @@ a{color:var(--g2);text-decoration:none}a:hover{text-decoration:underline}
 .stab[data-type="2차 활용"].on{background:#065F46;border-color:#065F46}
 .stab-new{padding:6px 13px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px dashed var(--gray4);background:transparent;color:var(--gray3);font-family:inherit;transition:all .15s}
 .stab-new:hover{border-color:var(--g3);color:var(--g2)}
+.stab-group{position:relative;display:inline-flex;align-items:center}
+.stab-mini{padding:2px 4px;font-size:9px;border:none;background:none;cursor:pointer;color:#ccc;opacity:.4;transition:opacity .15s;line-height:1}
+.stab-mini:hover{opacity:1;color:#888}
 .camp-count{font-size:10px;padding:1px 5px;border-radius:8px;background:rgba(255,255,255,.3);color:inherit;margin-left:3px}
 
 /* BUTTONS */
@@ -502,7 +505,7 @@ function renderSB(){
     });
     h=Object.keys(grouped).sort((a,b)=>b.localeCompare(a)).map(month=>{
       const label=month.includes('-')?`${parseInt(month.split('-')[1])}월`:month;
-      const items=grouped[month].map(r=>{
+      const items=[...grouped[month]].sort((a,b)=>(b.dateStart||b.date||'').localeCompare(a.dateStart||a.date||'')).map(r=>{
         const dateLabel=r.dateStart&&r.dateEnd?`${r.dateStart.slice(5).replace('-','/')} ~ ${r.dateEnd.slice(5).replace('-','/')}`:r.date||'';
         return `<button class="sbi${cur.id===r.id?' on':''}" onclick="if(_isDragging)return;cur.id='${r.id}';renderSB();renderPage()">
           <span style="display:block;font-weight:600">${e(r.title)}</span>
@@ -1319,19 +1322,19 @@ function pgCampaign(){
     var on=cur.campType===t?' on':'';
     var icon=t==='릴스'?'🎬':t==='2차 활용'?'♻️':'📌';
     var cnt=DB.campaigns.filter(function(c){return c.type===t;}).length;
-    return '<button class="stab'+on+'" data-type="'+t+'" onclick="campSubTab(this.dataset.type)">'+icon+' '+t+'<span class="camp-count">'+cnt+'</span></button>'
-      +'<button data-type="'+t+'" onclick="renameCampType(this.dataset.type)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="이름 수정">✏️</button>'
-      +'<button data-type="'+t+'" onclick="deleteCampType(this.dataset.type)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="삭제">✕</button>';
+    return '<span class="stab-group"><button class="stab'+on+'" data-type="'+t+'" onclick="campSubTab(this.dataset.type)">'+icon+' '+t+'<span class="camp-count">'+cnt+'</span></button>'
+      +'<button class="stab-mini" data-type="'+t+'" onclick="renameCampType(this.dataset.type)" title="이름 수정">✏️</button>'
+      +'<button class="stab-mini" data-type="'+t+'" onclick="deleteCampType(this.dataset.type)" title="삭제">✕</button></span>';
   }).join('');
   var _zvzoOn=cur.campType==='__zvzo'?' on':'';
   var _branOn=cur.campType==='__branderz'?' on':'';
   const subHtml='<div class="stab-wrap">'+_stabTypes
-    +'<button class="stab'+_zvzoOn+'" data-type="__zvzo" onclick="campSubTab(this.dataset.type)">🔗 zvzo 협업</button>'
-    +'<button data-brand="zvzo" onclick="renameCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="이름 수정">✏️</button>'
-    +'<button data-brand="zvzo" onclick="deleteCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="삭제">✕</button>'
-    +'<button class="stab'+_branOn+'" data-type="__branderz" onclick="campSubTab(this.dataset.type)">🏷 브랜더진 협업</button>'
-    +'<button data-brand="브랜더진" onclick="renameCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="이름 수정">✏️</button>'
-    +'<button data-brand="브랜더진" onclick="deleteCollab(this.dataset.brand)" style="padding:2px 4px;font-size:10px;border:none;background:none;cursor:pointer;color:#bbb" title="삭제">✕</button>'
+    +'<span class="stab-group"><button class="stab'+_zvzoOn+'" data-type="__zvzo" onclick="campSubTab(this.dataset.type)">🔗 zvzo 협업</button>'
+    +'<button class="stab-mini" data-brand="zvzo" onclick="renameCollab(this.dataset.brand)" title="이름 수정">✏️</button>'
+    +'<button class="stab-mini" data-brand="zvzo" onclick="deleteCollab(this.dataset.brand)" title="삭제">✕</button></span>'
+    +'<span class="stab-group"><button class="stab'+_branOn+'" data-type="__branderz" onclick="campSubTab(this.dataset.type)">🏷 브랜더진 협업</button>'
+    +'<button class="stab-mini" data-brand="브랜더진" onclick="renameCollab(this.dataset.brand)" title="이름 수정">✏️</button>'
+    +'<button class="stab-mini" data-brand="브랜더진" onclick="deleteCollab(this.dataset.brand)" title="삭제">✕</button></span>'
     +'<button class="stab-new" onclick="openNewCampType()">＋ 새 유형</button>'
     +'</div>';
 
@@ -1491,7 +1494,7 @@ function pgExposure(){
     </div>
     ${DB.exposure.length===0?`<div class="nodata" style="margin-top:60px">보고서를 추가해주세요</div>`:
     `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
-      ${DB.exposure.map(r=>`
+      ${[...DB.exposure].sort((a,b)=>(b.dateStart||b.date||'').localeCompare(a.dateStart||a.date||'')).map(r=>`
         <div onclick="if(_isDragging)return;cur.id='${r.id}';renderSB();renderPage()" style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:16px;cursor:pointer;transition:.15s" onmouseover="this.style.borderColor='#52B788'" onmouseout="this.style.borderColor='#e8e8e8'">
           <div style="font-weight:700;font-size:14px;margin-bottom:6px">${e(r.title)}</div>
           <div style="font-size:11px;color:#888">${r.dateStart&&r.dateEnd?`${r.dateStart} ~ ${r.dateEnd}`:r.date||''}</div>
@@ -1931,6 +1934,9 @@ function saveAddCampRound(){
 
 // 새 캠페인 유형 추가
 
+function collabTypeOpts(brand){
+  return brand==='zvzo'?['협업','릴스']:['피드','릴스'];
+}
 // ── 협업 일정 탭 (zvzo / 브랜더진) ──
 function pgCollabTab(brand, subHtml){
   if(!DB.collabs) DB.collabs=[];
@@ -1943,9 +1949,9 @@ function pgCollabTab(brand, subHtml){
     var statusBg=isActive?'#D1FAE5':isEnd?'#F3F4F6':'#EEF2FF';
     var statusColor=isActive?'#065F46':isEnd?'#9CA3AF':'#3730A3';
     var statusText=isActive?'진행중':isEnd?'종료':'예정';
-    var ct=item.contentType||'피드';
-    var ctBg=ct==='릴스'?'#EEF2FF':ct==='기타'?'#F1F5F9':'#D1FAE5';
-    var ctColor=ct==='릴스'?'#3730A3':ct==='기타'?'#475569':'#065F46';
+    var ct=item.contentType||collabTypeOpts(item.brand)[0];
+    var ctBg=ct==='릴스'?'#EEF2FF':'#D1FAE5';
+    var ctColor=ct==='릴스'?'#3730A3':'#065F46';
     return '<tr>'
       +'<td><div style="font-weight:600">'+item.name+'</div>'+(item.handle?'<div style="font-size:11px;color:#888">@'+item.handle+'</div>':'')+'</td>'
       +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+ctBg+';color:'+ctColor+'">'+ct+'</span></td>'
@@ -1966,10 +1972,12 @@ function pgCollabTab(brand, subHtml){
 
 function openAddCollab(brand){
   var d=today();
+  var opts=collabTypeOpts(brand);
+  var optHtml=opts.map(function(o){return '<option value="'+o+'">'+o+'</option>';}).join('');
   om('<div class="mh"><h3>'+brand+' 협업 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
-    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div><div class="fr"><label>유형</label><select id="cl7"><option value="피드">피드</option><option value="릴스">릴스</option><option value="기타">기타</option></select></div></div>'
+    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+d+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+d+'"></div></div>'
     +'<div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div>'
     +'</div>'
@@ -1978,7 +1986,7 @@ function openAddCollab(brand){
 
 function saveAddCollab(brand){
   var name=g('cl1').trim();if(!name){alert('협업자 이름 필수');return;}
-  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||'피드',startDate:g('cl4'),endDate:g('cl5'),note:g('cl6').trim()};
+  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),note:g('cl6').trim()};
   if(!DB.collabs) DB.collabs=[];
   DB.collabs.push(item);
   save();cm();toast(name+' 협업 추가됨');
@@ -1988,11 +1996,13 @@ function saveAddCollab(brand){
 
 function openEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
-  var ct=item.contentType||'피드';
+  var opts=collabTypeOpts(item.brand);
+  var ct=item.contentType||opts[0];
+  var optHtml=opts.map(function(o){return '<option value="'+o+'"'+(ct===o?' selected':'')+'>'+o+'</option>';}).join('');
   om('<div class="mh"><h3>협업 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" value="'+e(item.name)+'"></div><div class="fr"><label>채널 아이디</label><input id="cl2" value="'+e(item.handle||'')+'"></div></div>'
-    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div><div class="fr"><label>유형</label><select id="cl7"><option value="피드"'+(ct==='피드'?' selected':'')+'>피드</option><option value="릴스"'+(ct==='릴스'?' selected':'')+'>릴스</option><option value="기타"'+(ct==='기타'?' selected':'')+'>기타</option></select></div></div>'
+    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+item.startDate+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+item.endDate+'"></div></div>'
     +'<div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div>'
     +'</div>'
@@ -2001,7 +2011,7 @@ function openEditCollab(id){
 
 function saveEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
-  item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();item.contentType=g('cl7')||'피드';
+  item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();item.contentType=g('cl7')||collabTypeOpts(item.brand)[0];
   item.startDate=g('cl4');item.endDate=g('cl5');item.note=g('cl6').trim();
   save();cm();toast('수정됨');pgCampaign();
 }

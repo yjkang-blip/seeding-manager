@@ -1936,15 +1936,19 @@ function pgCollabTab(brand, subHtml){
   if(!DB.collabs) DB.collabs=[];
   const items=DB.collabs.filter(x=>x.brand===brand).sort((a,b)=>a.startDate.localeCompare(b.startDate));
   document.getElementById('nav-act').innerHTML='<button class="btn pri" data-brand="'+brand+'" onclick="openAddCollab(this.dataset.brand)">＋ 협업 추가</button>';
-  const rows=items.length===0?'<tr><td colspan="7" class="nodata">협업을 추가해주세요</td></tr>':items.map(function(item){
+  const rows=items.length===0?'<tr><td colspan="8" class="nodata">협업을 추가해주세요</td></tr>':items.map(function(item){
     var s=new Date(item.startDate),en=new Date(item.endDate),td=new Date();
     var days=Math.round((en-s)/(1000*60*60*24))+1;
     var isActive=s<=td&&td<=en,isEnd=td>en;
     var statusBg=isActive?'#D1FAE5':isEnd?'#F3F4F6':'#EEF2FF';
     var statusColor=isActive?'#065F46':isEnd?'#9CA3AF':'#3730A3';
     var statusText=isActive?'진행중':isEnd?'종료':'예정';
+    var ct=item.contentType||'피드';
+    var ctBg=ct==='릴스'?'#EEF2FF':ct==='기타'?'#F1F5F9':'#D1FAE5';
+    var ctColor=ct==='릴스'?'#3730A3':ct==='기타'?'#475569':'#065F46';
     return '<tr>'
       +'<td><div style="font-weight:600">'+item.name+'</div>'+(item.handle?'<div style="font-size:11px;color:#888">@'+item.handle+'</div>':'')+'</td>'
+      +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+ctBg+';color:'+ctColor+'">'+ct+'</span></td>'
       +'<td style="font-size:12px">'+(item.product||'-')+'</td>'
       +'<td>'+item.startDate+'</td>'
       +'<td>'+item.endDate+'</td>'
@@ -1956,7 +1960,7 @@ function pgCollabTab(brand, subHtml){
   document.getElementById('page').innerHTML=subHtml
     +'<div class="tw"><div class="tw-h"><h3>'+(brand==='zvzo'?'🔗':'🏷')+' '+brand+' 협업 일정</h3><span class="sub">'+items.length+'건</span></div>'
     +'<div class="tsc"><table>'
-    +'<thead><tr><th>협업자/채널</th><th>제품</th><th>시작일</th><th>종료일</th><th>상태</th><th>비고</th><th></th></tr></thead>'
+    +'<thead><tr><th>협업자/채널</th><th>유형</th><th>제품</th><th>시작일</th><th>종료일</th><th>상태</th><th>비고</th><th></th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div></div>';
 }
 
@@ -1965,7 +1969,7 @@ function openAddCollab(brand){
   om('<div class="mh"><h3>'+brand+' 협업 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
-    +'<div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div>'
+    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div><div class="fr"><label>유형</label><select id="cl7"><option value="피드">피드</option><option value="릴스">릴스</option><option value="기타">기타</option></select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+d+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+d+'"></div></div>'
     +'<div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div>'
     +'</div>'
@@ -1974,7 +1978,7 @@ function openAddCollab(brand){
 
 function saveAddCollab(brand){
   var name=g('cl1').trim();if(!name){alert('협업자 이름 필수');return;}
-  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),startDate:g('cl4'),endDate:g('cl5'),note:g('cl6').trim()};
+  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||'피드',startDate:g('cl4'),endDate:g('cl5'),note:g('cl6').trim()};
   if(!DB.collabs) DB.collabs=[];
   DB.collabs.push(item);
   save();cm();toast(name+' 협업 추가됨');
@@ -1984,10 +1988,11 @@ function saveAddCollab(brand){
 
 function openEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
+  var ct=item.contentType||'피드';
   om('<div class="mh"><h3>협업 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" value="'+e(item.name)+'"></div><div class="fr"><label>채널 아이디</label><input id="cl2" value="'+e(item.handle||'')+'"></div></div>'
-    +'<div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div>'
+    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div><div class="fr"><label>유형</label><select id="cl7"><option value="피드"'+(ct==='피드'?' selected':'')+'>피드</option><option value="릴스"'+(ct==='릴스'?' selected':'')+'>릴스</option><option value="기타"'+(ct==='기타'?' selected':'')+'>기타</option></select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+item.startDate+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+item.endDate+'"></div></div>'
     +'<div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div>'
     +'</div>'
@@ -1996,7 +2001,7 @@ function openEditCollab(id){
 
 function saveEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
-  item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();
+  item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();item.contentType=g('cl7')||'피드';
   item.startDate=g('cl4');item.endDate=g('cl5');item.note=g('cl6').trim();
   save();cm();toast('수정됨');pgCampaign();
 }

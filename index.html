@@ -215,8 +215,8 @@ document.addEventListener('touchmove',e=>{
   if(Math.abs(t.clientX-_dragStartX)>5||Math.abs(t.clientY-_dragStartY)>5) _isDragging=true;
 },{passive:true});
 document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
-var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[]};
-var cur={tab:'dash',campType:'릴스',id:null};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[]};
+var cur={tab:'dash',campType:'릴스',id:null,expView:'list'};
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
 
@@ -1483,14 +1483,19 @@ function pgHistory(){
 // ══════════════════════════════
 function pgExposure(){
   if(!DB.exposure) DB.exposure=[];
+  if(!DB.engagement) DB.engagement=[];
   const pg=document.getElementById('page');
   const rep=DB.exposure.find(r=>r.id===cur.id);
 
   if(!rep){
+    if(cur.expView==='gallery'){ pgExposureGallery(); return; }
     pg.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
       <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">📣 노출 보고</h2>
-      <button class="btn pri" onclick="openAddExposure()">+ 보고서 추가</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="cur.expView='gallery';renderPage()">📸 게시물 갤러리</button>
+        <button class="btn pri" onclick="openAddExposure()">+ 보고서 추가</button>
+      </div>
     </div>
     ${DB.exposure.length===0?`<div class="nodata" style="margin-top:60px">보고서를 추가해주세요</div>`:
     `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
@@ -1536,6 +1541,92 @@ function pgExposure(){
   </div>`
   :`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:20px;min-height:300px">${renderExpText(rep.content||'')}</div>`
   }`;
+}
+// ── 게시물 갤러리 (인스타 임베드 + 반응 추적) ──
+function normPostUrl(u){
+  if(!u) return '';
+  return u.trim().split('?')[0].replace(/\/$/,'').toLowerCase();
+}
+function getEngagement(postUrl){
+  const key=normPostUrl(postUrl);
+  return (DB.engagement||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
+}
+function ensureIgEmbedScript(cb){
+  if(window.instgrm){ cb&&cb(); return; }
+  var existing=document.getElementById('ig-embed-script');
+  if(existing){ existing.addEventListener('load',function(){cb&&cb();}); return; }
+  var s=document.createElement('script');
+  s.id='ig-embed-script';
+  s.src='https://www.instagram.com/embed.js';
+  s.async=true;
+  s.onload=function(){ cb&&cb(); };
+  document.body.appendChild(s);
+}
+function pgExposureGallery(){
+  const pg=document.getElementById('page');
+  const posts=[];
+  DB.weekly.forEach(function(w){
+    w.people.forEach(function(p){
+      if(p.postUrl) posts.push({w:w,p:p});
+    });
+  });
+  posts.sort(function(a,b){ return (b.w.date||'').localeCompare(a.w.date||''); });
+  pg.innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+    <button class="btn" onclick="cur.expView='list';renderPage()">← 노출 보고</button>
+    <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">📸 게시물 갤러리</h2>
+    <span style="font-size:12px;color:#aaa">${posts.length}건</span>
+  </div>
+  ${posts.length===0?`<div class="nodata" style="margin-top:60px">주간 리스트에서 인원 수정 시 게시물 URL을 입력하면 여기 표시돼요</div>`:
+  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+    ${posts.map(function(x){
+      const p=x.p,w=x.w;
+      const eng=getEngagement(p.postUrl);
+      const h=(eng&&eng.history)||[];
+      const last=h.length?h[h.length-1]:null;
+      const first=h.length?h[0]:null;
+      let trendHtml='<span style="color:#bbb;font-size:11px">아직 기록된 반응수가 없어요</span>';
+      if(last){
+        const likeDiff=last.likes-first.likes;
+        const cmtDiff=last.comments-first.comments;
+        trendHtml=`❤️ ${last.likes.toLocaleString()}${h.length>1?`<span style="color:${likeDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${likeDiff>=0?'+':''}${likeDiff})</span>`:''}
+          &nbsp;·&nbsp; 💬 ${last.comments.toLocaleString()}${h.length>1?`<span style="color:${cmtDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${cmtDiff>=0?'+':''}${cmtDiff})</span>`:''}
+          <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
+      }
+      return `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
+        <blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="${e(p.postUrl)}" style="margin:0;width:100%"></blockquote>
+        <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
+          <div style="font-weight:700;font-size:13px">${e(p.handle)}</div>
+          <div style="font-size:11px;color:#888;margin:2px 0 8px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'} · ${w.date}</div>
+          <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
+          <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
+            <input type="number" id="eng-like-${p.id}" placeholder="❤️ 좋아요" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+            <input type="number" id="eng-cmt-${p.id}" placeholder="💬 댓글" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+            <button class="btn sm pri" data-url="${e(p.postUrl)}" data-handle="${e(p.handle)}" data-pid="${p.id}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.pid)">기록</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`}`;
+  ensureIgEmbedScript(function(){ if(window.instgrm) window.instgrm.Embeds.process(); });
+}
+
+function recordEngagement(postUrl,handle,pid){
+  const likeInput=document.getElementById('eng-like-'+pid);
+  const cmtInput=document.getElementById('eng-cmt-'+pid);
+  const likes=parseInt(likeInput.value);
+  const comments=parseInt(cmtInput.value);
+  if(isNaN(likes)&&isNaN(comments)){ toast('숫자를 입력해주세요'); return; }
+  if(!DB.engagement) DB.engagement=[];
+  let rec=DB.engagement.find(function(x){ return normPostUrl(x.postUrl)===normPostUrl(postUrl); });
+  if(!rec){ rec={id:'eng'+uid(),postUrl:postUrl,handle:handle,history:[]}; DB.engagement.push(rec); }
+  const d=today();
+  const todayEntry=rec.history.find(function(x){ return x.date===d; });
+  if(todayEntry){ todayEntry.likes=isNaN(likes)?todayEntry.likes:likes; todayEntry.comments=isNaN(comments)?todayEntry.comments:comments; }
+  else{ rec.history.push({date:d,likes:isNaN(likes)?0:likes,comments:isNaN(comments)?0:comments}); }
+  save();
+  toast('반응수 기록됨');
+  pgExposureGallery();
 }
 
 function openAddExposure(){
@@ -1656,6 +1747,7 @@ function openAddP(wid){
       <div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서에 사용)</span></label><input id="fph" placeholder="010-0000-0000"></div>
     </div>
     <div class="fr"><label>배송지 주소</label><input id="fa" placeholder="서울시 강남구..."></div>
+    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(업로드 후 입력 → 갤러리에 반응 추적)</span></label><input id="fpost" placeholder="https://www.instagram.com/p/..."></div>
     <div class="fr"><label>비고</label><input id="fn" placeholder="진행이력 등"></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddP('${wid}')">추가</button></div>`);
@@ -1725,7 +1817,7 @@ function executeMoveP(wid){
 }
 function addProdField(){const list=document.getElementById('prod-list');const idx=list.querySelectorAll('.prod-row').length+1;const row=document.createElement('div');row.className='fg prod-row';row.innerHTML=`<div class="fr" style="flex:1"><label>제품 ${idx}</label><input class="prod-input" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button>`;list.appendChild(row);}
 function getProducts(){return [...document.querySelectorAll('.prod-input')].map(x=>x.value.trim()).filter(Boolean);}
-function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,products:getProducts(),contact:g('fc'),phone:g('fph'),address:g('fa'),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,products:getProducts(),contact:g('fc'),phone:g('fph'),address:g('fa'),postUrl:g('fpost').trim(),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 // 인원 수정
 function openEditP(wid,pid){
@@ -1742,11 +1834,12 @@ function openEditP(wid,pid){
     <button type="button" class="btn sm" onclick="addProdField()" style="margin-top:4px">+ 제품 추가</button>
     <div class="fg"><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div><div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서)</span></label><input id="fph" value="${e(p.phone||'')}"></div></div>
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
+    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(업로드 후 입력 → 갤러리에 반응 추적)</span></label><input id="fpost" value="${e(p.postUrl||'')}" placeholder="https://www.instagram.com/p/..."></div>
     <div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditP('${wid}','${pid}')">저장</button></div>`);
 }
-function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.products=getProducts();p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.products=getProducts();p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.postUrl=g('fpost').trim();p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // 붙여넣기 입력
 let _parsed=[];
@@ -2403,6 +2496,9 @@ try {
       DB.monthly = data.monthly;
       DB.campaigns = data.campaigns;
       DB.exposure = data.exposure || [];
+      DB.cost = data.cost || [];
+      DB.collabs = data.collabs || [];
+      DB.engagement = data.engagement || [];
     } else {
       seed();
       await window._fbSave();
@@ -2439,6 +2535,7 @@ onSnapshot(DB_DOC, (snap) => {
       DB.exposure = data.exposure || [];
       DB.cost = data.cost || [];
       DB.collabs = data.collabs || [];
+      DB.engagement = data.engagement || [];
       renderSB();
       renderPage();
     }

@@ -1217,7 +1217,7 @@ function pgWeekly(){
                 ${shipped?'배송완료':'배송대기'}
               </button>
             </td>
-            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}">${e(p.handle)}</td>
+            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}">${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):shipped?` <span title="배송완료지만 아직 게시물 링크 없음" style="font-size:10px;color:#D97706">⏳</span>`:''}</td>
             <td style="min-width:150px">${badges||'<span style="font-size:10px;color:#ccc">—</span>'}${dropdown}</td>
             <td>${p.url?`<a href="${e(p.url)}" target="_blank">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
             <td>${p.followers?p.followers.toLocaleString():'-'}</td>
@@ -1551,6 +1551,19 @@ function getEngagement(postUrl){
   const key=normPostUrl(postUrl);
   return (DB.engagement||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
 }
+function getPostUrls(p){
+  const arr=Array.isArray(p.postUrls)?p.postUrls.filter(Boolean).slice():[];
+  if(p.postUrl && !arr.includes(p.postUrl)) arr.unshift(p.postUrl);
+  return arr;
+}
+function isYoutubeUrl(u){ return /youtube\.com|youtu\.be/i.test(u||''); }
+function ytEmbedUrl(u){
+  let id='',m;
+  if((m=(u||'').match(/[?&]v=([^&]+)/))) id=m[1];
+  else if((m=(u||'').match(/youtu\.be\/([^?&]+)/))) id=m[1];
+  else if((m=(u||'').match(/youtube\.com\/shorts\/([^?&]+)/))) id=m[1];
+  return id?('https://www.youtube.com/embed/'+id):'';
+}
 function ensureIgEmbedScript(cb){
   if(window.instgrm){ cb&&cb(); return; }
   var existing=document.getElementById('ig-embed-script');
@@ -1562,53 +1575,210 @@ function ensureIgEmbedScript(cb){
   s.onload=function(){ cb&&cb(); };
   document.body.appendChild(s);
 }
+let _galleryExpanded=null; // wid -> bool, lazily initialized
+function toggleWeekGallery(wid){
+  _galleryExpanded[wid]=!_galleryExpanded[wid];
+  pgExposureGallery();
+}
 function pgExposureGallery(){
   const pg=document.getElementById('page');
-  const posts=[];
-  DB.weekly.forEach(function(w){
-    w.people.forEach(function(p){
-      if(p.postUrl) posts.push({w:w,p:p});
+  // 주차별로 묶기 (발송/배송완료된 인원만 대상)
+  const weekGroups=[];
+  [...DB.weekly].sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(w){
+    const items=(w.people||[]).filter(function(p){ return p.shipped; }).map(function(p){
+      return {p:p,w:w,urls:getPostUrls(p),posted:getPostUrls(p).length>0};
     });
+    if(items.length) weekGroups.push({w:w,items:items});
   });
-  posts.sort(function(a,b){ return (b.w.date||'').localeCompare(a.w.date||''); });
+  let totalPosted=0,totalPending=0;
+  weekGroups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
+
+  // 기본 펼침 상태: 대기 인원이 있는 주차 + 가장 최근 주차만 펼침, 나머지는 접힘
+  if(_galleryExpanded===null){
+    _galleryExpanded={};
+    weekGroups.forEach(function(g,i){
+      const hasPending=g.items.some(function(x){return !x.posted;});
+      _galleryExpanded[g.w.id]=hasPending||i===0;
+    });
+  }
+
   pg.innerHTML=`
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
     <button class="btn" onclick="cur.expView='list';renderPage()">← 노출 보고</button>
     <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">📸 게시물 갤러리</h2>
-    <span style="font-size:12px;color:#aaa">${posts.length}건</span>
+    <button class="btn" onclick="openBulkPostUrl()">📋 링크 일괄 등록</button>
+    <span style="font-size:12px;color:#aaa">게시완료 ${totalPosted} · 게시대기 ${totalPending}</span>
   </div>
-  ${posts.length===0?`<div class="nodata" style="margin-top:60px">주간 리스트에서 인원 수정 시 게시물 URL을 입력하면 여기 표시돼요</div>`:
-  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
-    ${posts.map(function(x){
-      const p=x.p,w=x.w;
-      const eng=getEngagement(p.postUrl);
-      const h=(eng&&eng.history)||[];
-      const last=h.length?h[h.length-1]:null;
-      const first=h.length?h[0]:null;
-      let trendHtml='<span style="color:#bbb;font-size:11px">아직 기록된 반응수가 없어요</span>';
-      if(last){
-        const likeDiff=last.likes-first.likes;
-        const cmtDiff=last.comments-first.comments;
-        trendHtml=`❤️ ${last.likes.toLocaleString()}${h.length>1?`<span style="color:${likeDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${likeDiff>=0?'+':''}${likeDiff})</span>`:''}
-          &nbsp;·&nbsp; 💬 ${last.comments.toLocaleString()}${h.length>1?`<span style="color:${cmtDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${cmtDiff>=0?'+':''}${cmtDiff})</span>`:''}
-          <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
-      }
-      return `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
-        <blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="${e(p.postUrl)}" style="margin:0;width:100%"></blockquote>
-        <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
-          <div style="font-weight:700;font-size:13px">${e(p.handle)}</div>
-          <div style="font-size:11px;color:#888;margin:2px 0 8px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'} · ${w.date}</div>
-          <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
-          <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
-            <input type="number" id="eng-like-${p.id}" placeholder="❤️ 좋아요" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
-            <input type="number" id="eng-cmt-${p.id}" placeholder="💬 댓글" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
-            <button class="btn sm pri" data-url="${e(p.postUrl)}" data-handle="${e(p.handle)}" data-pid="${p.id}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.pid)">기록</button>
-          </div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`}`;
+  ${weekGroups.length===0?`<div class="nodata" style="margin-top:60px">배송완료 처리된 인원이 여기 주차별로 자동 표시돼요</div>`:
+  weekGroups.map(function(g){
+    const w=g.w;
+    const postedCnt=g.items.filter(function(x){return x.posted;}).length;
+    const total=g.items.length;
+    const allDone=postedCnt===total;
+    const open=!!_galleryExpanded[w.id];
+    return `
+    <div class="tw" style="margin-bottom:14px">
+      <div class="tw-h" style="align-items:center;cursor:pointer" onclick="toggleWeekGallery('${w.id}')">
+        <h3>${open?'▾':'▸'} 🗓 ${getMonthRound(w.id)} <span style="font-weight:400;color:#999;font-size:12px">(${w.date})</span></h3>
+        <span class="sub" style="background:${allDone?'#D1FAE5':'#FEF3C7'};color:${allDone?'#065F46':'#92400E'};padding:3px 10px;border-radius:20px;font-weight:700">게시완료 ${postedCnt}/${total}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px 4px">
+        ${g.items.map(function(x){
+          const p=x.p;
+          return x.posted
+            ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#D1FAE5;color:#065F46;font-weight:600">✅ ${e(p.handle)}${x.urls.length>1?' ×'+x.urls.length:''}</span>`
+            : `<span onclick="event.stopPropagation();_galleryExpanded['${w.id}']=true;pgExposureGallery();setTimeout(()=>document.getElementById('pend-row-${p.id}')?.scrollIntoView({behavior:'smooth',block:'center'}),50)" style="cursor:pointer;font-size:11px;padding:4px 10px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:600">⏳ ${e(p.handle)}</span>`;
+        }).join('')}
+      </div>
+      ${!open?'':(g.items.some(function(x){return !x.posted;})?`
+      <div class="tsc" style="padding:0 16px 14px">
+        <table>
+          <thead><tr><th>활동명</th><th>제품</th><th style="min-width:260px">게시물 링크 입력 (여러 개면 줄바꿈)</th></tr></thead>
+          <tbody>
+          ${g.items.filter(function(x){return !x.posted;}).map(function(x){
+            const p=x.p;
+            return `<tr id="pend-row-${p.id}">
+              <td style="font-weight:700">${e(p.handle)}</td>
+              <td style="font-size:11px;max-width:150px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'}</td>
+              <td>
+                <div style="display:flex;gap:6px">
+                  <textarea id="quick-url-${p.id}" rows="1" placeholder="https://www.instagram.com/p/... (줄바꿈으로 여러개)" style="flex:1;padding:5px 8px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical"></textarea>
+                  <button class="btn sm pri" data-wid="${w.id}" data-pid="${p.id}" onclick="quickSetPostUrl(this.dataset.wid,this.dataset.pid)">등록</button>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>`:'')}
+      ${!open?'':(g.items.some(function(x){return x.posted;})?`
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;padding:4px 16px 16px">
+        ${g.items.filter(function(x){return x.posted;}).flatMap(function(x){
+          const p=x.p;
+          return x.urls.map(function(url,idx){
+            const eng=getEngagement(url);
+            const h=(eng&&eng.history)||[];
+            const last=h.length?h[h.length-1]:null;
+            const first=h.length?h[0]:null;
+            let trendHtml='<span style="color:#bbb;font-size:11px">아직 기록된 반응수가 없어요</span>';
+            if(last){
+              const likeDiff=last.likes-first.likes;
+              const cmtDiff=last.comments-first.comments;
+              trendHtml=`❤️ ${last.likes.toLocaleString()}${h.length>1?`<span style="color:${likeDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${likeDiff>=0?'+':''}${likeDiff})</span>`:''}
+                &nbsp;·&nbsp; 💬 ${last.comments.toLocaleString()}${h.length>1?`<span style="color:${cmtDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${cmtDiff>=0?'+':''}${cmtDiff})</span>`:''}
+                <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
+            }
+            const uid_=p.id+'-'+idx;
+            const embedHtml=isYoutubeUrl(url)
+              ? `<div style="position:relative;padding-top:56.25%;background:#000"><iframe src="${e(ytEmbedUrl(url))}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div>`
+              : `<blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="${e(url)}" style="margin:0;width:100%"></blockquote>`;
+            return `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
+              ${embedHtml}
+              <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
+                <div style="font-weight:700;font-size:13px">${e(p.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}</div>
+                <div style="font-size:11px;color:#888;margin:2px 0 8px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'}</div>
+                <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
+                <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
+                  <input type="number" id="eng-like-${uid_}" placeholder="❤️ 좋아요" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+                  <input type="number" id="eng-cmt-${uid_}" placeholder="💬 댓글" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+                  <button class="btn sm pri" data-url="${e(url)}" data-handle="${e(p.handle)}" data-uid="${uid_}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.uid)">기록</button>
+                </div>
+              </div>
+            </div>`;
+          });
+        }).join('')}
+      </div>`:'')}
+    </div>`;
+  }).join('')}`;
   ensureIgEmbedScript(function(){ if(window.instgrm) window.instgrm.Embeds.process(); });
+}
+
+function openBulkPostUrl(){
+  om(`<div class="mh"><h3>📋 게시물 링크 일괄 등록</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div style="font-size:12px;color:#888;margin-bottom:8px">
+      한 줄에 한 명씩, <b>활동명(핸들)</b>과 <b>게시물 URL(인스타/유튜브, 여러 개면 한 줄에 띄어쓰기로 나열)</b>을 탭(Tab)으로 구분해서 붙여넣어주세요.<br>
+      예) mayijinn&nbsp;&nbsp;&nbsp;https://www.instagram.com/p/DWsqHVlCSti/ https://www.youtube.com/watch?v=abc123
+    </div>
+    <textarea id="bulkPostUrlText" rows="12" style="width:100%;padding:10px;border:1px solid #e0e0e0;border-radius:8px;font-family:monospace;font-size:12px" placeholder="핸들[TAB]링크1 링크2
+핸들[TAB]링크
+..."></textarea>
+    <div id="bulkPostUrlResult" style="margin-top:10px;font-size:12px"></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">닫기</button><button class="btn pri" onclick="applyBulkPostUrl()">일괄 반영</button></div>`);
+}
+
+function applyBulkPostUrl(){
+  const raw=g('bulkPostUrlText');
+  const lines=raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  let addedLinks=0,peopleTouched=0,skippedDup=0,skippedBadUrl=0;
+  const notFound=[];
+  lines.forEach(function(line){
+    let idText,urlsPart;
+    if(line.indexOf('\t')>-1){
+      const t=line.split('\t');
+      idText=t[0].trim();
+      urlsPart=t.slice(1).join(' ');
+    }else{
+      // 탭이 없으면 첫 URL 앞까지를 이름으로 간주
+      const m=line.match(/https?:\/\//);
+      if(!m) return;
+      idText=line.slice(0,m.index).trim();
+      urlsPart=line.slice(m.index);
+    }
+    const urlTokens=(urlsPart.match(/https?:\/\/\S+/g)||[]).map(u=>u.replace(/[),.]+$/,''));
+    const validUrls=urlTokens.filter(u=>/instagram\.com/i.test(u)||isYoutubeUrl(u));
+    if(!urlTokens.length) return;
+    if(!validUrls.length){ skippedBadUrl+=urlTokens.length; return; }
+    // 괄호 안이 있으면 핸들로 우선 사용, 없으면 전체 텍스트 사용
+    const m2=idText.match(/\(([^)]+)\)/);
+    const handleGuess=m2?m2[1].trim():idText;
+    const key=normH(handleGuess);
+    let found=null;
+    DB.weekly.forEach(function(w){
+      w.people.forEach(function(p){
+        if(!found && normH(p.handle)===key) found=p;
+      });
+    });
+    if(!found){
+      const key2=normH(idText);
+      DB.weekly.forEach(function(w){
+        w.people.forEach(function(p){
+          if(!found && normH(p.handle)===key2) found=p;
+        });
+      });
+    }
+    if(!found){ notFound.push(idText); return; }
+    const existing=getPostUrls(found);
+    const newOnes=validUrls.filter(u=>!existing.includes(u));
+    skippedDup+=(validUrls.length-newOnes.length);
+    if(newOnes.length){
+      found.postUrls=existing.concat(newOnes);
+      delete found.postUrl;
+      addedLinks+=newOnes.length;
+      peopleTouched++;
+    }
+  });
+  if(addedLinks) save();
+  const resultDiv=document.getElementById('bulkPostUrlResult');
+  resultDiv.innerHTML=`✅ <b>${peopleTouched}명</b>에게 링크 <b>${addedLinks}개</b> 등록됨`
+    +(skippedDup?` · ⏭ 이미 있던 링크라 건너뜀 ${skippedDup}개`:'')
+    +(skippedBadUrl?` · 🚫 인스타/유튜브 링크 아님 ${skippedBadUrl}개`:'')
+    +(notFound.length?`<div style="color:#991B1B;margin-top:6px">❌ 활동명 매칭 실패 (${notFound.length}명): ${notFound.map(e).join(', ')}</div>`:'');
+  if(addedLinks) toast(peopleTouched+'명 게시물 링크 등록됨');
+}
+
+function quickSetPostUrl(wid,pid){
+  const input=document.getElementById('quick-url-'+pid);
+  const urls=input.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!urls.length){ toast('링크를 입력해주세요'); return; }
+  const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);
+  if(!p) return;
+  p.postUrls=getPostUrls(p).concat(urls.filter(u=>!getPostUrls(p).includes(u)));
+  delete p.postUrl;
+  save();
+  toast(p.handle+' 게시물 등록됨');
+  pgExposureGallery();
 }
 
 function recordEngagement(postUrl,handle,pid){
@@ -1747,7 +1917,7 @@ function openAddP(wid){
       <div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서에 사용)</span></label><input id="fph" placeholder="010-0000-0000"></div>
     </div>
     <div class="fr"><label>배송지 주소</label><input id="fa" placeholder="서울시 강남구..."></div>
-    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(업로드 후 입력 → 갤러리에 반응 추적)</span></label><input id="fpost" placeholder="https://www.instagram.com/p/..."></div>
+    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(인스타/유튜브, 여러 개면 줄바꿈으로 구분)</span></label><textarea id="fpost" rows="2" placeholder="https://www.instagram.com/p/...&#10;https://www.youtube.com/watch?v=..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>
     <div class="fr"><label>비고</label><input id="fn" placeholder="진행이력 등"></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddP('${wid}')">추가</button></div>`);
@@ -1817,7 +1987,7 @@ function executeMoveP(wid){
 }
 function addProdField(){const list=document.getElementById('prod-list');const idx=list.querySelectorAll('.prod-row').length+1;const row=document.createElement('div');row.className='fg prod-row';row.innerHTML=`<div class="fr" style="flex:1"><label>제품 ${idx}</label><input class="prod-input" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button>`;list.appendChild(row);}
 function getProducts(){return [...document.querySelectorAll('.prod-input')].map(x=>x.value.trim()).filter(Boolean);}
-function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,products:getProducts(),contact:g('fc'),phone:g('fph'),address:g('fa'),postUrl:g('fpost').trim(),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,products:getProducts(),contact:g('fc'),phone:g('fph'),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 // 인원 수정
 function openEditP(wid,pid){
@@ -1834,12 +2004,12 @@ function openEditP(wid,pid){
     <button type="button" class="btn sm" onclick="addProdField()" style="margin-top:4px">+ 제품 추가</button>
     <div class="fg"><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div><div class="fr"><label>전화번호 <span style="color:#52B788;font-size:10px">(발주서)</span></label><input id="fph" value="${e(p.phone||'')}"></div></div>
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
-    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(업로드 후 입력 → 갤러리에 반응 추적)</span></label><input id="fpost" value="${e(p.postUrl||'')}" placeholder="https://www.instagram.com/p/..."></div>
+    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(인스타/유튜브, 여러 개면 줄바꿈으로 구분)</span></label><textarea id="fpost" rows="2" placeholder="https://www.instagram.com/p/...&#10;https://www.youtube.com/watch?v=..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px">${e(getPostUrls(p).join('\n'))}</textarea></div>
     <div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditP('${wid}','${pid}')">저장</button></div>`);
 }
-function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.products=getProducts();p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.postUrl=g('fpost').trim();p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.products=getProducts();p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // 붙여넣기 입력
 let _parsed=[];

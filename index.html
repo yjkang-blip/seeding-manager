@@ -652,11 +652,11 @@ function pgCost(){
 
 function costGrouped(md){
   const grouped={};
-  (md.rows||[]).forEach(r=>{
+  (md.rows||[]).forEach((r,i)=>{
     if(!grouped[r.cat]) grouped[r.cat]={qty:0,cost:0,memos:[]};
     grouped[r.cat].qty+=r.qty||0;
     grouped[r.cat].cost+=r.cost||0;
-    if(r.memo) grouped[r.cat].memos.push({memo:r.memo,qty:r.qty,cost:r.cost});
+    if(r.memo) grouped[r.cat].memos.push({memo:r.memo,qty:r.qty,cost:r.cost,idx:i});
   });
   return grouped;
 }
@@ -679,7 +679,7 @@ function costCalc(md){
 }
 
 // ── 저장 토스트 ──
-function costSave(){}
+function costSave(){save();}
 function costManualSave(month){save();toast('저장됐어요 ✓');}
 
 // ────────────────────────────────
@@ -810,20 +810,25 @@ function _renderCostModal(md){
           const qty=ov[k]?.qty!=null?ov[k].qty:(c.g[k]?.qty||0);
           const cost=ov[k]?.cost!=null?ov[k].cost:(c.g[k]?.cost||0);
           const memos=c.g[k]?.memos||[];
-          const memosHtml=memos.length>0?`
+          const memosHtml=`
             <tr id="memo-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}" style="display:none;background:#fafafa">
               <td colspan="5" style="padding:8px 14px 10px 28px">
-                <div style="font-size:11px;color:#888;margin-bottom:4px">적요 내역</div>
-                ${memos.map(m=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
-                  <span style="color:#555">${m.memo}</span>
-                  <span style="color:#888;white-space:nowrap;margin-left:12px">${fmtW(m.qty)}개 · ${fmtC(m.cost)}</span>
+                <div style="font-size:11px;color:#888;margin-bottom:4px">적요 내역 (직접 수정 가능)</div>
+                ${memos.length===0?'<div style="font-size:12px;color:#bbb;padding:4px 0">등록된 내역이 없어요</div>':''}
+                ${memos.map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
+                  <input type="text" value="${e(m.memo)}" style="flex:1;border:1px solid transparent;background:transparent;border-radius:4px;padding:2px 5px;font-size:12px;color:#555;font-family:inherit" onfocus="this.style.borderColor='#e8e8e8';this.style.background='#fff'" onblur="this.style.borderColor='transparent';this.style.background='transparent'" onchange="costEditMemoRow('${month}',${m.idx},'memo',this.value)">
+                  <input type="number" value="${m.qty||''}" placeholder="0" style="width:56px;border:1px solid #e8e8e8;border-radius:4px;padding:2px 5px;font-size:12px;text-align:right;font-family:inherit" onchange="costEditMemoRow('${month}',${m.idx},'qty',this.value)">개
+                  <span>·</span>
+                  <input type="number" value="${m.cost||''}" placeholder="0" style="width:88px;border:1px solid #e8e8e8;border-radius:4px;padding:2px 5px;font-size:12px;text-align:right;font-family:inherit" onchange="costEditMemoRow('${month}',${m.idx},'cost',this.value)">원
+                  <button onclick="costDelMemoRow('${month}',${m.idx})" style="background:none;border:none;cursor:pointer;color:#c66;font-size:12px;padding:0 2px" title="이 줄 삭제">×</button>
                 </div>`).join('')}
+                <button onclick="costAddMemoRow('${month}','${k.replace(/'/g,"\\'")}')" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px dashed #ccc;border-radius:6px;background:none;color:#888;cursor:pointer;font-family:inherit">+ 줄 추가</button>
               </td>
-            </tr>`:'';
+            </tr>`;
           return `<tr style="border-bottom:1px solid #e8e8e8" id="cmrow-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}">
             <td style="padding:8px 14px">
               <div style="display:flex;align-items:center;gap:6px">
-                ${memos.length>0?`<button onclick="costToggleMemo('${k.replace(/'/g,"\\'")}','${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}')" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:12px;padding:0;line-height:1" id="memo-btn-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}">▶</button>`:'<span style="width:16px"></span>'}
+                <button onclick="costToggleMemo('${k.replace(/'/g,"\\'")}','${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}')" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:12px;padding:0;line-height:1" id="memo-btn-${k.replace(/[^a-zA-Z0-9가-힣]/g,'_')}">▶</button>
                 <span style="font-size:13px">${k}</span>
               </div>
             </td>
@@ -984,6 +989,32 @@ function costSetOverride(month,cat,field,val){
   }
 }
 
+function costAddMemoRow(month,cat){
+  const md=DB.cost.find(x=>x.month===month);if(!md)return;
+  if(!md.rows) md.rows=[];
+  md.rows.push({cat:cat,memo:'새 내역',qty:0,cost:0});
+  costSave();
+  _renderCostModal(md);
+  setTimeout(()=>{
+    const safeKey=cat.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+    const tr=document.getElementById('memo-'+safeKey);
+    if(tr){tr.style.display='table-row';const btn=document.getElementById('memo-btn-'+safeKey);if(btn)btn.textContent='▼';}
+  },50);
+}
+function costEditMemoRow(month,idx,field,val){
+  const md=DB.cost.find(x=>x.month===month);if(!md||!md.rows||!md.rows[idx])return;
+  if(field==='memo') md.rows[idx].memo=val;
+  else md.rows[idx][field]=parseInt(val)||0;
+  costSave();
+  _renderCostModal(md);
+}
+function costDelMemoRow(month,idx){
+  const md=DB.cost.find(x=>x.month===month);if(!md||!md.rows)return;
+  if(!confirm('이 적요 줄을 삭제할까요?'))return;
+  md.rows.splice(idx,1);
+  costSave();
+  _renderCostModal(md);
+}
 function costAddCatRow(month){
   const cat=prompt('채널명 입력');if(!cat||!cat.trim())return;
   const md=DB.cost.find(x=>x.month===month);if(!md)return;

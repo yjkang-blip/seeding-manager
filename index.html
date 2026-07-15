@@ -601,7 +601,6 @@ const COST_AUTO_CATS=[
 ];
 const COST_EXCL=['거래처증정','이벤트/체험단','샘플'];
 const COST_ORDER=['시딩','네이버 브랜드 커넥트','무신사','zvzo','브랜더진'];
-let _costView='list';
 let _costCalY=new Date().getFullYear();
 let _costSelMonth=null;
 
@@ -612,17 +611,44 @@ function pgCost(){
   if(!DB.cost) DB.cost=[];
   document.getElementById('nav-act').innerHTML=`
     <div style="display:flex;gap:6px;align-items:center">
-      <div style="display:flex;border:1px solid #e8e8e8;border-radius:7px;overflow:hidden">
-        <button onclick="setCostView('list')" style="padding:5px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:${_costView==='list'?'#1D4E3A':'transparent'};color:${_costView==='list'?'#fff':'#888'}">목록</button>
-        <button onclick="setCostView('cal')" style="padding:5px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:${_costView==='cal'?'#1D4E3A':'transparent'};color:${_costView==='cal'?'#fff':'#888'}">달력</button>
-      </div>
       <button class="btn pri" onclick="costAddMonth()" style="font-size:12px">＋ 월 추가</button>
     </div>`;
-  if(_costView==='list') pgCostList();
-  else pgCostCal();
-}
+  const pg=document.getElementById('page');
+  if(DB.cost.length===0){
+    pg.innerHTML=`<div style="text-align:center;padding:4rem;color:#888;font-size:13px"><div style="font-size:32px;margin-bottom:12px">📊</div>월을 추가하고 이카운트 엑셀을 업로드하세요</div>`;
+    return;
+  }
+  const months=[...DB.cost].sort((a,b)=>b.month.localeCompare(a.month));
+  let gQty=0,gPeople=0,gEx=0,gInc=0,gPaid=0,gFree=0;
+  months.forEach(md=>{const c=costCalc(md);gQty+=c.totalQty;gPeople+=c.totalPeople;gEx+=c.grandEx;gInc+=c.grandInc;gPaid+=c.paidCount;gFree+=c.freeCount;});
 
-function setCostView(v){_costView=v;pgCost();}
+  pg.innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:18px 20px">
+      <div style="font-size:12px;color:#888;margin-bottom:6px">👥 누적 인원</div>
+      <div style="font-size:26px;font-weight:800;color:#1D4E3A">${fmtW(gPeople)}<span style="font-size:14px;font-weight:600;color:#aaa">명</span></div>
+    </div>
+    <div style="background:#EEF2FF;border:1px solid #dfe3fb;border-radius:12px;padding:18px 20px">
+      <div style="font-size:12px;color:#5457a8;margin-bottom:6px">💸 유가 인원 <span style="font-weight:400">(릴스협업)</span></div>
+      <div style="font-size:26px;font-weight:800;color:#3730A3">${fmtW(gPaid)}<span style="font-size:14px;font-weight:600;color:#8688c9">명</span></div>
+    </div>
+    <div style="background:#D1FAE5;border:1px solid #b6ecd2;border-radius:12px;padding:18px 20px">
+      <div style="font-size:12px;color:#0e6b4c;margin-bottom:6px">🎁 무가 인원</div>
+      <div style="font-size:26px;font-weight:800;color:#065F46">${fmtW(gFree)}<span style="font-size:14px;font-weight:600;color:#5aab8f">명</span></div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+    ${[{l:'📦 누적 수량',v:fmtW(gQty)+'개'},{l:'🧾 누적 원가 (VAT-)',v:fmtC(gEx)},{l:'🧾 누적 원가 (VAT+)',v:fmtC(gInc)}]
+      .map(c=>`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:14px 18px"><div style="font-size:12px;color:#888;margin-bottom:5px">${c.l}</div><div style="font-size:19px;font-weight:700">${c.v}</div></div>`).join('')}
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <button onclick="_costCalY--;pgCost();" style="background:none;border:1px solid #e8e8e8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px">‹</button>
+    <span style="font-size:16px;font-weight:700;min-width:60px;text-align:center">${_costCalY}년</span>
+    <button onclick="_costCalY++;pgCost();" style="background:none;border:1px solid #e8e8e8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px">›</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" id="cost-cal-grid"></div>`;
+  pgCostCalGrid();
+}
 
 function costGrouped(md){
   const grouped={};
@@ -657,94 +683,14 @@ function costSave(){}
 function costManualSave(month){save();toast('저장됐어요 ✓');}
 
 // ────────────────────────────────
-//  LIST VIEW
+//  MONTHLY CALENDAR GRID (목록+달력 통합)
 // ────────────────────────────────
-function pgCostList(){
+function pgCostCalGrid(){
   if(!DB.cost) DB.cost=[];
-  const pg=document.getElementById('page');
-  const months=[...DB.cost].sort((a,b)=>b.month.localeCompare(a.month));
-  if(months.length===0){
-    pg.innerHTML=`<div style="text-align:center;padding:4rem;color:#888;font-size:13px"><div style="font-size:32px;margin-bottom:12px">📊</div>월을 추가하고 이카운트 엑셀을 업로드하세요</div>`;
-    return;
-  }
-  let gQty=0,gPeople=0,gEx=0,gInc=0,gPaid=0,gFree=0;
-  months.forEach(md=>{const c=costCalc(md);gQty+=c.totalQty;gPeople+=c.totalPeople;gEx+=c.grandEx;gInc+=c.grandInc;gPaid+=c.paidCount;gFree+=c.freeCount;});
-
-  pg.innerHTML=`
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
-    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:18px 20px">
-      <div style="font-size:12px;color:#888;margin-bottom:6px">👥 누적 인원</div>
-      <div style="font-size:26px;font-weight:800;color:#1D4E3A">${fmtW(gPeople)}<span style="font-size:14px;font-weight:600;color:#aaa">명</span></div>
-    </div>
-    <div style="background:#EEF2FF;border:1px solid #dfe3fb;border-radius:12px;padding:18px 20px">
-      <div style="font-size:12px;color:#5457a8;margin-bottom:6px">💸 유가 인원 <span style="font-weight:400">(릴스협업)</span></div>
-      <div style="font-size:26px;font-weight:800;color:#3730A3">${fmtW(gPaid)}<span style="font-size:14px;font-weight:600;color:#8688c9">명</span></div>
-    </div>
-    <div style="background:#D1FAE5;border:1px solid #b6ecd2;border-radius:12px;padding:18px 20px">
-      <div style="font-size:12px;color:#0e6b4c;margin-bottom:6px">🎁 무가 인원</div>
-      <div style="font-size:26px;font-weight:800;color:#065F46">${fmtW(gFree)}<span style="font-size:14px;font-weight:600;color:#5aab8f">명</span></div>
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
-    ${[{l:'📦 누적 수량',v:fmtW(gQty)+'개'},{l:'🧾 누적 원가 (VAT-)',v:fmtC(gEx)},{l:'🧾 누적 원가 (VAT+)',v:fmtC(gInc)}]
-      .map(c=>`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:14px 18px"><div style="font-size:12px;color:#888;margin-bottom:5px">${c.l}</div><div style="font-size:19px;font-weight:700">${c.v}</div></div>`).join('')}
-  </div>
-  <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:800px">
-      <thead><tr style="background:#f9f9f9">
-        <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">월</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">인원</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#3730A3;border-bottom:1px solid #e8e8e8">유가</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#065F46;border-bottom:1px solid #e8e8e8">무가</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">수량</th>
-        ${COST_ORDER.map(k=>`<th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">${k}</th>`).join('')}
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">유가비용</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT-</th>
-        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">VAT+</th>
-        <th style="padding:10px 8px;border-bottom:1px solid #e8e8e8"></th>
-      </tr></thead>
-      <tbody>
-        ${months.map(md=>{
-          const c=costCalc(md);
-          return `<tr style="border-bottom:1px solid #e8e8e8;cursor:pointer" onclick="costOpenMonth('${md.month}')" onmouseover="this.style.background='#f8fbf8'" onmouseout="this.style.background=''">
-            <td style="padding:11px 14px;font-weight:600">${md.month}</td>
-            <td style="padding:11px 10px;text-align:right">${c.totalPeople?fmtW(c.totalPeople)+'명':'-'}</td>
-            <td style="padding:11px 10px;text-align:right;color:#3730A3">${c.paidCount?fmtW(c.paidCount)+'명':'-'}</td>
-            <td style="padding:11px 10px;text-align:right;color:#065F46">${c.freeCount?fmtW(c.freeCount)+'명':'-'}</td>
-            <td style="padding:11px 10px;text-align:right">${fmtW(c.totalQty)}개</td>
-            ${COST_ORDER.map(k=>{
-              const qty=(c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0));
-              return `<td style="padding:11px 10px;text-align:right;color:${qty?'#111':'#ccc'}">${qty?fmtW(qty)+'개':'-'}</td>`;
-            }).join('')}
-            <td style="padding:11px 10px;text-align:right;color:${c.extraEx?'#111':'#ccc'}">${c.extraEx?fmtC(c.extraEx):'-'}</td>
-            <td style="padding:11px 10px;text-align:right;font-weight:600">${fmtC(c.grandEx)}</td>
-            <td style="padding:11px 10px;text-align:right;color:#888">${fmtC(c.grandInc)}</td>
-            <td style="padding:11px 8px;text-align:center"><button class="btn sm" onclick="event.stopPropagation();costOpenMonth('${md.month}')" style="font-size:11px">편집</button></td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
-    </div>
-  </div>`;
-}
-
-// ────────────────────────────────
-//  CALENDAR VIEW
-// ────────────────────────────────
-function pgCostCal(){
-  if(!DB.cost) DB.cost=[];
-  const pg=document.getElementById('page');
   const y=_costCalY;
   const MNAMES=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  pg.innerHTML=`
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-    <button onclick="_costCalY--;pgCostCal();" style="background:none;border:1px solid #e8e8e8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px">‹</button>
-    <span style="font-size:16px;font-weight:700;min-width:60px;text-align:center">${y}년</span>
-    <button onclick="_costCalY++;pgCostCal();" style="background:none;border:1px solid #e8e8e8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px">›</button>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" id="cost-cal-grid"></div>`;
   const grid=document.getElementById('cost-cal-grid');
+  grid.innerHTML='';
   for(let mi=0;mi<12;mi++){
     const monthStr=`${y}-${String(mi+1).padStart(2,'0')}`;
     const md=DB.cost.find(x=>x.month===monthStr);
@@ -757,9 +703,13 @@ function pgCostCal(){
       card.innerHTML=`
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <span style="font-size:13px;font-weight:700">${MNAMES[mi]}</span>
-          <div style="text-align:right;font-size:10px;color:#888">${c.totalPeople?c.totalPeople+'명 · ':''}${fmtW(c.totalQty)}개</div>
+          <div style="text-align:right;font-size:10px;color:#888">${fmtW(c.totalQty)}개</div>
         </div>
         <div style="font-size:17px;font-weight:700;color:#1D4E3A;margin-bottom:8px">${fmtC(c.grandEx)}</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <span style="flex:1;background:#EEF2FF;border-radius:6px;padding:4px 8px;font-size:11px;color:#3730A3;font-weight:600">💸 유가 ${fmtW(c.paidCount)}명</span>
+          <span style="flex:1;background:#D1FAE5;border-radius:6px;padding:4px 8px;font-size:11px;color:#065F46;font-weight:600">🎁 무가 ${fmtW(c.freeCount)}명</span>
+        </div>
         <div style="display:flex;flex-direction:column;gap:3px">
           ${bars.map(k=>{
             const qty=c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0);
@@ -814,6 +764,9 @@ function _renderCostModal(md){
   </div>
 
   <!-- 요약 카드 -->
+  ${md.people&&!md.paidPeople&&!md.freePeople?`<div style="background:#FEF3C7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#92400E">
+    ⚠️ 예전에 입력해둔 인원 <b>${fmtW(md.people)}명</b>이 남아있어요. 유가/무가로 나눠서 아래에 다시 입력해주세요 (합쳐서 ${fmtW(md.people)}명이 되도록).
+  </div>`:''}
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
     <div style="background:#EEF2FF;border-radius:8px;padding:12px 14px">
       <div style="font-size:11px;color:#5457a8;margin-bottom:6px;font-weight:600">💸 유가 인원</div>

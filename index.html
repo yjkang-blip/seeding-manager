@@ -647,7 +647,9 @@ function costCalc(md){
   });
   const extraEx=(md.extra||[]).reduce((s,e)=>s+(e.vatEx||0),0);
   const extraInc=(md.extra||[]).reduce((s,e)=>s+(e.vatInc||0),0);
-  return {g,ov,allCats,totalQty,totalPeople:md.people||0,totalEx,extraEx,extraInc,grandEx:totalEx+extraEx,grandInc:totalEx*1.1+extraInc};
+  const paidCount=md.paidPeople||0;
+  const freeCount=md.freePeople||0;
+  return {g,ov,allCats,totalQty,totalPeople:paidCount+freeCount,totalEx,extraEx,extraInc,grandEx:totalEx+extraEx,grandInc:totalEx*1.1+extraInc,paidCount,freeCount};
 }
 
 // ── 저장 토스트 ──
@@ -665,13 +667,27 @@ function pgCostList(){
     pg.innerHTML=`<div style="text-align:center;padding:4rem;color:#888;font-size:13px"><div style="font-size:32px;margin-bottom:12px">📊</div>월을 추가하고 이카운트 엑셀을 업로드하세요</div>`;
     return;
   }
-  let gQty=0,gPeople=0,gEx=0,gInc=0;
-  months.forEach(md=>{const c=costCalc(md);gQty+=c.totalQty;gPeople+=c.totalPeople;gEx+=c.grandEx;gInc+=c.grandInc;});
+  let gQty=0,gPeople=0,gEx=0,gInc=0,gPaid=0,gFree=0;
+  months.forEach(md=>{const c=costCalc(md);gQty+=c.totalQty;gPeople+=c.totalPeople;gEx+=c.grandEx;gInc+=c.grandInc;gPaid+=c.paidCount;gFree+=c.freeCount;});
 
   pg.innerHTML=`
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
-    ${[{l:'누적 인원',v:fmtW(gPeople)+'명'},{l:'누적 수량',v:fmtW(gQty)+'개'},{l:'누적 원가 (VAT-)',v:fmtC(gEx)},{l:'누적 원가 (VAT+)',v:fmtC(gInc)}]
-      .map(c=>`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:14px 16px"><div style="font-size:11px;color:#888;margin-bottom:4px">${c.l}</div><div style="font-size:17px;font-weight:700">${c.v}</div></div>`).join('')}
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+    <div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:18px 20px">
+      <div style="font-size:12px;color:#888;margin-bottom:6px">👥 누적 인원</div>
+      <div style="font-size:26px;font-weight:800;color:#1D4E3A">${fmtW(gPeople)}<span style="font-size:14px;font-weight:600;color:#aaa">명</span></div>
+    </div>
+    <div style="background:#EEF2FF;border:1px solid #dfe3fb;border-radius:12px;padding:18px 20px">
+      <div style="font-size:12px;color:#5457a8;margin-bottom:6px">💸 유가 인원 <span style="font-weight:400">(릴스협업)</span></div>
+      <div style="font-size:26px;font-weight:800;color:#3730A3">${fmtW(gPaid)}<span style="font-size:14px;font-weight:600;color:#8688c9">명</span></div>
+    </div>
+    <div style="background:#D1FAE5;border:1px solid #b6ecd2;border-radius:12px;padding:18px 20px">
+      <div style="font-size:12px;color:#0e6b4c;margin-bottom:6px">🎁 무가 인원</div>
+      <div style="font-size:26px;font-weight:800;color:#065F46">${fmtW(gFree)}<span style="font-size:14px;font-weight:600;color:#5aab8f">명</span></div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+    ${[{l:'📦 누적 수량',v:fmtW(gQty)+'개'},{l:'🧾 누적 원가 (VAT-)',v:fmtC(gEx)},{l:'🧾 누적 원가 (VAT+)',v:fmtC(gInc)}]
+      .map(c=>`<div style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:14px 18px"><div style="font-size:12px;color:#888;margin-bottom:5px">${c.l}</div><div style="font-size:19px;font-weight:700">${c.v}</div></div>`).join('')}
   </div>
   <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
     <div style="overflow-x:auto">
@@ -679,6 +695,8 @@ function pgCostList(){
       <thead><tr style="background:#f9f9f9">
         <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">월</th>
         <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">인원</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#3730A3;border-bottom:1px solid #e8e8e8">유가</th>
+        <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#065F46;border-bottom:1px solid #e8e8e8">무가</th>
         <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">수량</th>
         ${COST_ORDER.map(k=>`<th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8;white-space:nowrap">${k}</th>`).join('')}
         <th style="padding:10px 10px;text-align:right;font-size:10px;font-weight:700;color:#888;border-bottom:1px solid #e8e8e8">유가비용</th>
@@ -692,6 +710,8 @@ function pgCostList(){
           return `<tr style="border-bottom:1px solid #e8e8e8;cursor:pointer" onclick="costOpenMonth('${md.month}')" onmouseover="this.style.background='#f8fbf8'" onmouseout="this.style.background=''">
             <td style="padding:11px 14px;font-weight:600">${md.month}</td>
             <td style="padding:11px 10px;text-align:right">${c.totalPeople?fmtW(c.totalPeople)+'명':'-'}</td>
+            <td style="padding:11px 10px;text-align:right;color:#3730A3">${c.paidCount?fmtW(c.paidCount)+'명':'-'}</td>
+            <td style="padding:11px 10px;text-align:right;color:#065F46">${c.freeCount?fmtW(c.freeCount)+'명':'-'}</td>
             <td style="padding:11px 10px;text-align:right">${fmtW(c.totalQty)}개</td>
             ${COST_ORDER.map(k=>{
               const qty=(c.ov[k]?.qty!=null?c.ov[k].qty:(c.g[k]?.qty||0));
@@ -779,7 +799,7 @@ function _renderCostModal(md){
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px">
     <div>
       <div style="font-size:17px;font-weight:700">${month} 현물 정산</div>
-      <div style="font-size:12px;color:#888;margin-top:2px">수정 후 💾 저장 버튼을 눌러주세요</div>
+      <div style="font-size:12px;color:#888;margin-top:2px">수정 후 💾 저장 버튼을 눌러주세요 · <span style="color:#3730A3;font-weight:600">유가 ${c.paidCount}명</span> · <span style="color:#065F46;font-weight:600">무가 ${c.freeCount}명</span></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <label style="padding:6px 14px;border:1px solid #e8e8e8;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600;font-family:inherit;background:#fff;display:inline-flex;align-items:center;gap:5px">
@@ -794,23 +814,29 @@ function _renderCostModal(md){
   </div>
 
   <!-- 요약 카드 -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
-    <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px">
-      <div style="font-size:11px;color:#888;margin-bottom:6px">인원 (직접 입력)</div>
-      <input type="number" value="${md.people||''}" placeholder="0" min="0"
-        style="width:100%;border:1px solid #e8e8e8;border-radius:6px;padding:4px 8px;font-size:16px;font-weight:700;font-family:inherit;background:#fff"
-        onchange="costSetPeople('${month}',this.value)">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+    <div style="background:#EEF2FF;border-radius:8px;padding:12px 14px">
+      <div style="font-size:11px;color:#5457a8;margin-bottom:6px;font-weight:600">💸 유가 인원</div>
+      <input type="number" value="${md.paidPeople||''}" placeholder="0" min="0"
+        style="width:100%;border:1px solid #dfe3fb;border-radius:6px;padding:4px 8px;font-size:18px;font-weight:800;font-family:inherit;background:#fff;color:#3730A3"
+        onchange="costSetPeople('${month}','paid',this.value)">
+    </div>
+    <div style="background:#D1FAE5;border-radius:8px;padding:12px 14px">
+      <div style="font-size:11px;color:#0e6b4c;margin-bottom:6px;font-weight:600">🎁 무가 인원</div>
+      <input type="number" value="${md.freePeople||''}" placeholder="0" min="0"
+        style="width:100%;border:1px solid #b6ecd2;border-radius:6px;padding:4px 8px;font-size:18px;font-weight:800;font-family:inherit;background:#fff;color:#065F46"
+        onchange="costSetPeople('${month}','free',this.value)">
     </div>
     <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px">
-      <div style="font-size:11px;color:#888;margin-bottom:4px">총 수량</div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">📦 총 수량</div>
       <div style="font-size:16px;font-weight:700" id="cm-total-qty">${fmtW(c.totalQty)}개</div>
     </div>
     <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px">
-      <div style="font-size:11px;color:#888;margin-bottom:4px">TTL 원가 (VAT-)</div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">🧾 TTL 원가 (VAT-)</div>
       <div style="font-size:16px;font-weight:700" id="cm-grand-ex">${fmtC(c.grandEx)}</div>
     </div>
     <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px">
-      <div style="font-size:11px;color:#888;margin-bottom:4px">TTL 원가 (VAT+)</div>
+      <div style="font-size:11px;color:#888;margin-bottom:4px">🧾 TTL 원가 (VAT+)</div>
       <div style="font-size:16px;font-weight:700;color:#888" id="cm-grand-inc">${fmtC(c.grandInc)}</div>
     </div>
   </div>
@@ -949,7 +975,7 @@ function _renderCostModal(md){
   <!-- TTL -->
   <div style="background:#1D4E3A;color:#fff;border-radius:10px;padding:14px 18px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
     <span style="font-size:13px;font-weight:700;flex:1">${month} TTL</span>
-    ${md.people?`<div style="text-align:right"><div style="font-size:10px;opacity:.6">인원</div><div style="font-size:15px;font-weight:700">${fmtW(md.people)}명</div></div>`:''}
+    ${(c.paidCount||c.freeCount)?`<div style="text-align:right"><div style="font-size:10px;opacity:.6">인원</div><div style="font-size:15px;font-weight:700">유가 ${fmtW(c.paidCount)} · 무가 ${fmtW(c.freeCount)}</div></div>`:''}
     <div style="text-align:right"><div style="font-size:10px;opacity:.6">수량</div><div style="font-size:15px;font-weight:700" id="cm-ttl-qty">${fmtW(c.totalQty)}개</div></div>
     <div style="text-align:right"><div style="font-size:10px;opacity:.6">VAT-</div><div style="font-size:15px;font-weight:700" id="cm-ttl-ex">${fmtC(c.grandEx)}</div></div>
     <div style="text-align:right"><div style="font-size:10px;opacity:.6">VAT+</div><div style="font-size:15px;font-weight:700" id="cm-ttl-inc">${fmtC(c.grandInc)}</div></div>
@@ -983,9 +1009,12 @@ function _costRefreshTTL(md){
   Object.entries(ids).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.textContent=val;});
 }
 
-function costSetPeople(month,val){
+function costSetPeople(month,kind,val){
   const md=DB.cost.find(x=>x.month===month);if(!md)return;
-  md.people=parseInt(val)||0;costSave();
+  if(kind==='paid') md.paidPeople=parseInt(val)||0;
+  else md.freePeople=parseInt(val)||0;
+  costSave();
+  _renderCostModal(md);
 }
 
 function costSetOverride(month,cat,field,val){

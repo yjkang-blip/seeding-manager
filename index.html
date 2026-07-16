@@ -1710,7 +1710,7 @@ function openBulkPostUrl(){
   om(`<div class="mh"><h3>📋 게시물 링크 일괄 등록</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
     <div style="font-size:12px;color:#888;margin-bottom:8px">
-      한 줄에 한 명씩, <b>활동명(핸들)</b>과 <b>게시물 URL(인스타/유튜브, 여러 개면 한 줄에 띄어쓰기로 나열)</b>을 탭(Tab)으로 구분해서 붙여넣어주세요.<br>
+      한 줄에 한 명씩, <b>활동명(핸들)</b>과 <b>게시물 URL(인스타/유튜브, 여러 개면 띄어쓰기로 나열)</b>을 넣어주세요. 탭이든 스페이스든 상관없이, 줄에서 첫 링크(http로 시작) 앞부분을 자동으로 활동명으로 인식해요.<br>
       예) mayijinn&nbsp;&nbsp;&nbsp;https://www.instagram.com/p/DWsqHVlCSti/ https://www.youtube.com/watch?v=abc123
     </div>
     <textarea id="bulkPostUrlText" rows="12" style="width:100%;padding:10px;border:1px solid #e0e0e0;border-radius:8px;font-family:monospace;font-size:12px" placeholder="핸들[TAB]링크1 링크2
@@ -1727,18 +1727,11 @@ function applyBulkPostUrl(){
   let addedLinks=0,peopleTouched=0,skippedDup=0,skippedBadUrl=0;
   const notFound=[];
   lines.forEach(function(line){
-    let idText,urlsPart;
-    if(line.indexOf('\t')>-1){
-      const t=line.split('\t');
-      idText=t[0].trim();
-      urlsPart=t.slice(1).join(' ');
-    }else{
-      // 탭이 없으면 첫 URL 앞까지를 이름으로 간주
-      const m=line.match(/https?:\/\//);
-      if(!m) return;
-      idText=line.slice(0,m.index).trim();
-      urlsPart=line.slice(m.index);
-    }
+    // 탭이든 스페이스든 상관없이, 첫 URL(http로 시작) 앞까지를 항상 이름으로 간주
+    const m=line.match(/https?:\/\//);
+    if(!m) return;
+    const idText=line.slice(0,m.index).trim();
+    const urlsPart=line.slice(m.index);
     const urlTokens=(urlsPart.match(/https?:\/\/\S+/g)||[]).map(u=>u.replace(/[),.]+$/,''));
     const validUrls=urlTokens.filter(u=>/instagram\.com/i.test(u)||isYoutubeUrl(u));
     if(!urlTokens.length) return;
@@ -1747,17 +1740,21 @@ function applyBulkPostUrl(){
     const m2=idText.match(/\(([^)]+)\)/);
     const handleGuess=m2?m2[1].trim():idText;
     const key=normH(handleGuess);
+    const key2=normH(idText);
     let found=null;
+    // 1) 완전 일치 우선
     DB.weekly.forEach(function(w){
       w.people.forEach(function(p){
-        if(!found && normH(p.handle)===key) found=p;
+        const ph=normH(p.handle);
+        if(!found && (ph===key||ph===key2)) found=p;
       });
     });
-    if(!found){
-      const key2=normH(idText);
+    // 2) 완전 일치 없으면 포함(substring) 매칭 — "뉴진(mayijinn)"처럼 한글명+핸들이 섞여 저장된 경우 대응
+    if(!found && key){
       DB.weekly.forEach(function(w){
         w.people.forEach(function(p){
-          if(!found && normH(p.handle)===key2) found=p;
+          const ph=normH(p.handle);
+          if(!found && ph && (ph.includes(key)||key.includes(ph))) found=p;
         });
       });
     }

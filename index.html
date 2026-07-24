@@ -215,7 +215,7 @@ document.addEventListener('touchmove',e=>{
   if(Math.abs(t.clientX-_dragStartX)>5||Math.abs(t.clientY-_dragStartY)>5) _isDragging=true;
 },{passive:true});
 document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
-var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[]};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[]};
 var cur={tab:'dash',campType:'릴스',id:null,expView:'list'};
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
@@ -1157,6 +1157,35 @@ function pgDash(){
 }
 
 // ── 주간 리스트 ──
+function weeklySearch(q){
+  const resultEl=document.getElementById('weeklySearchResult');
+  q=q.trim();
+  if(!q){ resultEl.innerHTML=''; return; }
+  const key=normH(q);
+  const matches=[];
+  [...DB.weekly].sort((a,b)=>b.round-a.round).forEach(function(w){
+    w.people.forEach(function(p){
+      if(normH(p.handle).includes(key)||(p.realname&&normH(p.realname).includes(key))){
+        matches.push({w:w,p:p});
+      }
+    });
+  });
+  if(matches.length===0){
+    resultEl.innerHTML=`<div style="padding:14px 16px;color:#aaa;font-size:13px;border-top:1px solid #f0f0f0">"${e(q)}" 검색 결과 없음</div>`;
+    return;
+  }
+  resultEl.innerHTML=`<div style="border-top:1px solid #f0f0f0">
+    ${matches.map(function(m){
+      return `<div onclick="selW('${m.w.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f8fbf8'" onmouseout="this.style.background=''">
+        <span style="font-weight:700;font-size:13px;flex:1">${e(m.p.handle)}${m.p.realname?` <span style="font-weight:400;color:#aaa;font-size:11px">(${e(m.p.realname)})</span>`:''}</span>
+        <span style="font-size:11px;color:#3730A3;background:#EEF2FF;padding:3px 9px;border-radius:20px;font-weight:600">${getMonthRound(m.w.id)}</span>
+        <span style="font-size:11px;color:#888">${m.w.date}</span>
+        <span style="font-size:11px;color:${m.p.shipped?'#065F46':'#D97706'}">${m.p.shipped?'배송완료':'배송전'}</span>
+        <span style="font-size:11px;color:#3730A3">→</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
 function pgWeekly(){
   const w=cur.id?DB.weekly.find(x=>x.id===cur.id):null;
   if(!w){
@@ -1168,6 +1197,12 @@ function pgWeekly(){
       <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${DB.weekly.reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
       <div class="sc"><div class="sc-l">이번달</div><div class="sc-n">${DB.weekly.filter(w=>w.date.startsWith(new Date().toISOString().slice(0,7))).reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
       <div class="sc"><div class="sc-l">최근 차수</div><div class="sc-n" style="font-size:14px">${DB.weekly.length?getMonthRound(DB.weekly.reduce((a,b)=>a.round>b.round?a:b).id):'-'}</div></div>
+    </div>
+    <div class="tw" style="margin-bottom:14px">
+      <div style="padding:14px 16px">
+        <input type="text" id="weeklySearchInput" oninput="weeklySearch(this.value)" placeholder="🔍 활동명으로 검색 (전체 차수에서 찾기)" style="width:100%;padding:9px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit">
+      </div>
+      <div id="weeklySearchResult"></div>
     </div>
     <div class="tw">
       <div class="tw-h"><h3>전체 주간 리스트</h3><span class="sub">차수/날짜 직접 수정 가능</span></div>
@@ -1230,7 +1265,7 @@ function pgWeekly(){
                 ${shipped?'배송완료':'배송대기'}
               </button>
             </td>
-            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}">${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):shipped?` <span title="배송완료지만 아직 게시물 링크 없음" style="font-size:10px;color:#D97706">⏳</span>`:''}</td>
+            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}"><span onclick="event.stopPropagation();toggleFavorite('${w.id}','${p.id}')" style="cursor:pointer;font-size:12px;margin-right:2px" title="즐겨찾기">${p.favorite?'⭐':'☆'}</span>${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):shipped?` <span title="배송완료지만 아직 게시물 링크 없음" style="font-size:10px;color:#D97706">⏳</span>`:''}</td>
             <td style="min-width:150px">${badges||'<span style="font-size:10px;color:#ccc">—</span>'}${dropdown}</td>
             <td>${p.url?`<a href="${e(p.url)}" target="_blank">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
             <td>${p.followers?p.followers.toLocaleString():'-'}</td>
@@ -1564,6 +1599,10 @@ function getEngagement(postUrl){
   const key=normPostUrl(postUrl);
   return (DB.engagement||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
 }
+function getScreenshot(postUrl){
+  const key=normPostUrl(postUrl);
+  return (DB.screenshots||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
+}
 function getPostUrls(p){
   const arr=Array.isArray(p.postUrls)?p.postUrls.filter(Boolean).slice():[];
   if(p.postUrl && !arr.includes(p.postUrl)) arr.unshift(p.postUrl);
@@ -1588,17 +1627,65 @@ function ensureIgEmbedScript(cb){
   s.onload=function(){ cb&&cb(); };
   document.body.appendChild(s);
 }
+// 활동명(핸들) 기준으로 어떤 카테고리(릴스 캠페인/2차 활용/zvzo/브랜더진)에 속하는지 판별
+function personCategories(handle){
+  const key=normH(handle);
+  const cats=new Set();
+  DB.campaigns.forEach(function(c){
+    if(c.people.some(function(p){return normH(p.handle)===key;})){
+      if(c.type==='릴스') cats.add('릴스캠페인');
+      if(c.type==='2차 활용') cats.add('2차활용');
+    }
+  });
+  (DB.collabs||[]).forEach(function(item){
+    if(normH(item.handle)===key||normH(item.name)===key){
+      if(item.brand==='zvzo') cats.add('zvzo');
+      if(item.brand==='브랜더진') cats.add('브랜더진');
+    }
+  });
+  DB.weekly.forEach(function(w){
+    w.people.forEach(function(p){
+      if(normH(p.handle)===key&&p.collabTags){
+        p.collabTags.forEach(function(t){
+          if(t==='zvzo') cats.add('zvzo');
+          if(t==='브랜더진') cats.add('브랜더진');
+        });
+      }
+    });
+  });
+  return cats;
+}
 let _galleryExpanded=null; // wid -> bool, lazily initialized
+let _galleryCat='전체'; // 갤러리 카테고리 필터
 function toggleWeekGallery(wid){
   _galleryExpanded[wid]=!_galleryExpanded[wid];
   pgExposureGallery();
 }
+function setGalleryCat(cat){ _galleryCat=cat; pgExposureGallery(); }
+function toggleFavorite(wid,pid){
+  const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);
+  if(!p) return;
+  p.favorite=!p.favorite;
+  save();
+  if(cur.tab==='weekly') renderPage(); else pgExposureGallery();
+}
 function pgExposureGallery(){
   const pg=document.getElementById('page');
-  // 주차별로 묶기 (발송/배송완료된 인원만 대상)
+  const catList=['전체','릴스캠페인','2차활용','zvzo','브랜더진','⭐즐겨찾기'];
+  const catLabel={'전체':'전체','릴스캠페인':'🎬 릴스 캠페인','2차활용':'♻️ 2차 활용','zvzo':'🔗 zvzo','브랜더진':'🏷 브랜더진','⭐즐겨찾기':'⭐ 즐겨찾기'};
+  // 주차별로 묶기 (발송/배송완료된 인원만 대상, 단 즐겨찾기 탭은 전체 인원 대상)
   const weekGroups=[];
   [...DB.weekly].sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(w){
-    const items=(w.people||[]).filter(function(p){ return p.shipped; }).map(function(p){
+    let people=(w.people||[]);
+    if(_galleryCat==='⭐즐겨찾기'){
+      people=people.filter(function(p){return p.favorite;});
+    }else{
+      people=people.filter(function(p){return p.shipped;});
+      if(_galleryCat!=='전체'){
+        people=people.filter(function(p){return personCategories(p.handle).has(_galleryCat);});
+      }
+    }
+    const items=people.map(function(p){
       return {p:p,w:w,urls:getPostUrls(p),posted:getPostUrls(p).length>0};
     });
     if(items.length) weekGroups.push({w:w,items:items});
@@ -1616,13 +1703,19 @@ function pgExposureGallery(){
   }
 
   pg.innerHTML=`
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
     <button class="btn" onclick="cur.expView='list';renderPage()">← 노출 보고</button>
     <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">📸 게시물 갤러리</h2>
     <button class="btn" onclick="openBulkPostUrl()">📋 링크 일괄 등록</button>
     <span style="font-size:12px;color:#aaa">게시완료 ${totalPosted} · 게시대기 ${totalPending}</span>
   </div>
-  ${weekGroups.length===0?`<div class="nodata" style="margin-top:60px">배송완료 처리된 인원이 여기 주차별로 자동 표시돼요</div>`:
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+    ${catList.map(function(cat){
+      const on=_galleryCat===cat;
+      return `<button onclick="setGalleryCat('${cat}')" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
+    }).join('')}
+  </div>
+  ${weekGroups.length===0?`<div class="nodata" style="margin-top:60px">${_galleryCat==='⭐즐겨찾기'?'⭐ 표시한 사람이 아직 없어요. 주간 리스트에서 별표를 눌러보세요':'배송완료 처리된 인원이 여기 주차별로 자동 표시돼요'}</div>`:
   weekGroups.map(function(g){
     const w=g.w;
     const postedCnt=g.items.filter(function(x){return x.posted;}).length;
@@ -1670,6 +1763,7 @@ function pgExposureGallery(){
           const p=x.p;
           return x.urls.map(function(url,idx){
             const eng=getEngagement(url);
+            const shot=getScreenshot(url);
             const h=(eng&&eng.history)||[];
             const last=h.length?h[h.length-1]:null;
             const first=h.length?h[0]:null;
@@ -1682,13 +1776,16 @@ function pgExposureGallery(){
                 <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
             }
             const uid_=p.id+'-'+idx;
-            const embedHtml=isYoutubeUrl(url)
+            // 캡처된 이미지가 있으면 그걸 기본으로 보여주고(누르면 원본 링크로 이동), 아직 캡처 전이면 실시간 임베드로 대체 표시
+            const embedHtml=shot
+              ? `<a href="${e(url)}" target="_blank" style="display:block;text-decoration:none"><img src="${e(shot.url)}" style="width:100%;display:block" loading="lazy"></a>`
+              : isYoutubeUrl(url)
               ? `<div style="position:relative;padding-top:56.25%;background:#000"><iframe src="${e(ytEmbedUrl(url))}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div>`
               : `<blockquote class="instagram-media" data-instgrm-captioned data-instgrm-permalink="${e(url)}" style="margin:0;width:100%"></blockquote>`;
             return `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
               ${embedHtml}
               <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
-                <div style="font-weight:700;font-size:13px">${e(p.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}</div>
+                <div style="font-weight:700;font-size:13px">${e(p.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
                 <div style="font-size:11px;color:#888;margin:2px 0 8px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'}</div>
                 <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
                 <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
@@ -1750,11 +1847,12 @@ function applyBulkPostUrl(){
       });
     });
     // 2) 완전 일치 없으면 포함(substring) 매칭 — "뉴진(mayijinn)"처럼 한글명+핸들이 섞여 저장된 경우 대응
-    if(!found && key){
+    //    단, 너무 짧은 문자열끼리는 오매칭 위험이 커서 3자 이상일 때만 허용
+    if(!found && key && key.length>=3){
       DB.weekly.forEach(function(w){
         w.people.forEach(function(p){
           const ph=normH(p.handle);
-          if(!found && ph && (ph.includes(key)||key.includes(ph))) found=p;
+          if(!found && ph && ph.length>=3 && (ph.includes(key)||key.includes(ph))) found=p;
         });
       });
     }
@@ -2679,6 +2777,7 @@ try {
       DB.cost = data.cost || [];
       DB.collabs = data.collabs || [];
       DB.engagement = data.engagement || [];
+      DB.screenshots = data.screenshots || [];
     } else {
       seed();
       await window._fbSave();
@@ -2716,6 +2815,7 @@ onSnapshot(DB_DOC, (snap) => {
       DB.cost = data.cost || [];
       DB.collabs = data.collabs || [];
       DB.engagement = data.engagement || [];
+      DB.screenshots = data.screenshots || [];
       renderSB();
       renderPage();
     }

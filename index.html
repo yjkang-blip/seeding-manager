@@ -215,7 +215,7 @@ document.addEventListener('touchmove',e=>{
   if(Math.abs(t.clientX-_dragStartX)>5||Math.abs(t.clientY-_dragStartY)>5) _isDragging=true;
 },{passive:true});
 document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
-var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[]};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[],galleryHidden:[]};
 var cur={tab:'dash',campType:'릴스',id:null,expView:'list'};
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
@@ -1628,6 +1628,21 @@ function ensureIgEmbedScript(cb){
   document.body.appendChild(s);
 }
 // 활동명(핸들) 기준으로 어떤 카테고리(릴스 캠페인/2차 활용/zvzo/브랜더진)에 속하는지 판별
+function gallerySrcKey(src){
+  if(src.type==='weekly') return 'weekly-'+src.wid+'-'+src.pid;
+  if(src.type==='campaign') return 'campaign-'+src.cid+'-'+src.pid;
+  if(src.type==='collab') return 'collab-'+src.id;
+  return 'unknown';
+}
+function deleteFromGallery(src){
+  if(!confirm('갤러리에서 이 카드를 지울까요? (주간 리스트/캠페인/협업 탭의 실제 데이터는 그대로 남아요)')) return;
+  if(!DB.galleryHidden) DB.galleryHidden=[];
+  const key=gallerySrcKey(src);
+  if(!DB.galleryHidden.includes(key)) DB.galleryHidden.push(key);
+  save();
+  toast('갤러리에서 지웠어요');
+  pgExposureGallery();
+}
 function personCategories(handle){
   const key=normH(handle);
   const cats=new Set();
@@ -1673,10 +1688,25 @@ function pgExposureGallery(){
   const pg=document.getElementById('page');
   const catList=['전체','릴스캠페인','2차활용','zvzo','브랜더진','⭐즐겨찾기'];
   const catLabel={'전체':'전체','릴스캠페인':'🎬 릴스 캠페인','2차활용':'♻️ 2차 활용','zvzo':'🔗 zvzo','브랜더진':'🏷 브랜더진','⭐즐겨찾기':'⭐ 즐겨찾기'};
+  const hiddenSet=new Set(DB.galleryHidden||[]);
+  function notHidden(src){ return !hiddenSet.has(gallerySrcKey(src)); }
 
   // 주간 리스트에 등록된 모든 핸들(정규화) - 캠페인/협업 인원 중복 방지용
   const weeklyHandleKeys=new Set();
-  DB.weekly.forEach(function(w){ w.people.forEach(function(p){ weeklyHandleKeys.add(normH(p.handle)); }); });
+  DB.weekly.forEach(function(w){ w.people.forEach(function(p){
+    if(p.handle) weeklyHandleKeys.add(normH(p.handle));
+    if(p.realname) weeklyHandleKeys.add(normH(p.realname));
+  }); });
+  function inWeekly(text){
+    const key=normH(text);
+    if(!key) return false;
+    if(weeklyHandleKeys.has(key)) return true;
+    if(key.length<2) return false;
+    for(const k of weeklyHandleKeys){
+      if(k.length>=2&&(k.includes(key)||key.includes(k))) return true;
+    }
+    return false;
+  }
 
   const groups=[];
 
@@ -1693,7 +1723,7 @@ function pgExposureGallery(){
     }
     const items=people.map(function(p){
       return {handle:p.handle,product:(p.products||[p.product]).filter(Boolean).join(', ')||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'weekly',wid:w.id,pid:p.id}};
-    });
+    }).filter(function(x){return notHidden(x.src);});
     if(items.length) groups.push({key:'w-'+w.id,label:'🗓 '+getMonthRound(w.id),dateLabel:w.date,items:items});
   });
 
@@ -1703,11 +1733,12 @@ function pgExposureGallery(){
       const wantType=_galleryCat==='전체'?null:(_galleryCat==='릴스캠페인'?'릴스':'2차 활용');
       if(wantType&&c.type!==wantType) return;
       if(!wantType&&c.type!=='릴스'&&c.type!=='2차 활용') return;
-      const extra=(c.people||[]).filter(function(p){ return !weeklyHandleKeys.has(normH(p.handle)); });
+      const extra=(c.people||[]).filter(function(p){ return !inWeekly(p.handle); });
       if(!extra.length) return;
       const items=extra.map(function(p){
         return {handle:p.handle,product:p.product||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'campaign',cid:c.id,pid:p.id}};
-      });
+      }).filter(function(x){return notHidden(x.src);});
+      if(!items.length) return;
       groups.push({key:'c-'+c.id,label:(c.type==='릴스'?'🎬 ':'♻️ ')+c.name+' '+c.round+'차',dateLabel:c.date,items:items});
     });
   }
@@ -1716,11 +1747,12 @@ function pgExposureGallery(){
   if(_galleryCat!=='⭐즐겨찾기'&&_galleryCat!=='릴스캠페인'&&_galleryCat!=='2차활용'){
     ['zvzo','브랜더진'].forEach(function(brand){
       if(_galleryCat!=='전체'&&_galleryCat!==brand) return;
-      const extra=(DB.collabs||[]).filter(function(item){ return item.brand===brand&&!weeklyHandleKeys.has(normH(item.handle))&&!weeklyHandleKeys.has(normH(item.name)); });
+      const extra=(DB.collabs||[]).filter(function(item){ return item.brand===brand&&!inWeekly(item.handle)&&!inWeekly(item.name); });
       if(!extra.length) return;
       const items=extra.map(function(item){
         return {handle:item.name+(item.handle?' ('+item.handle+')':''),product:item.product||'-',urls:getPostUrls(item),posted:getPostUrls(item).length>0,src:{type:'collab',id:item.id}};
-      });
+      }).filter(function(x){return notHidden(x.src);});
+      if(!items.length) return;
       groups.push({key:'collab-'+brand,label:(brand==='zvzo'?'🔗 ':'🏷 ')+brand+' 협업',dateLabel:'',items:items});
     });
   }
@@ -1786,6 +1818,7 @@ function pgExposureGallery(){
                 <div style="display:flex;gap:6px">
                   <textarea id="${inputId}" rows="1" placeholder="https://www.instagram.com/p/... (줄바꿈으로 여러개)" style="flex:1;padding:5px 8px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical"></textarea>
                   <button class="btn sm pri" onclick='quickSetPostUrlGeneric(${JSON.stringify(x.src)},"${inputId}")'>등록</button>
+                  <button class="btn sm" onclick='deleteFromGallery(${JSON.stringify(x.src)})' title="갤러리에서만 지우기 (주간 리스트는 유지)">🗑</button>
                 </div>
               </td>
             </tr>`;
@@ -1819,7 +1852,10 @@ function pgExposureGallery(){
             return `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
               ${embedHtml}
               <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
-                <div style="font-weight:700;font-size:13px">${e(x.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div style="font-weight:700;font-size:13px">${e(x.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
+                  <button onclick='deleteFromGallery(${JSON.stringify(x.src)})' style="background:none;border:none;cursor:pointer;color:#ccc;font-size:12px;padding:0 0 0 6px" title="갤러리에서만 지우기 (주간 리스트는 유지)">🗑</button>
+                </div>
                 <div style="font-size:11px;color:#888;margin:2px 0 8px">${e(x.product)}</div>
                 <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
                 <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
@@ -2833,6 +2869,7 @@ try {
       DB.collabs = data.collabs || [];
       DB.engagement = data.engagement || [];
       DB.screenshots = data.screenshots || [];
+      DB.galleryHidden = data.galleryHidden || [];
     } else {
       seed();
       await window._fbSave();
@@ -2871,6 +2908,7 @@ onSnapshot(DB_DOC, (snap) => {
       DB.collabs = data.collabs || [];
       DB.engagement = data.engagement || [];
       DB.screenshots = data.screenshots || [];
+      DB.galleryHidden = data.galleryHidden || [];
       renderSB();
       renderPage();
     }

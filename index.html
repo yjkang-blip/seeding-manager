@@ -1460,7 +1460,7 @@ function pgCampaign(){
       <tbody>${c.people.length===0?`<tr><td colspan="11" class="nodata">인원을 추가해주세요</td></tr>`:
         c.people.map((p,i)=>`<tr>
           <td style="color:#ccc">${i+1}</td>
-          <td style="font-weight:700">${e(p.handle)}</td>
+          <td style="font-weight:700">${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):''}</td>
           <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
           <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
           <td style="max-width:160px;font-size:11px">${e(p.product)||'<span style="color:#bbb">미정</span>'}</td>
@@ -1673,8 +1673,14 @@ function pgExposureGallery(){
   const pg=document.getElementById('page');
   const catList=['전체','릴스캠페인','2차활용','zvzo','브랜더진','⭐즐겨찾기'];
   const catLabel={'전체':'전체','릴스캠페인':'🎬 릴스 캠페인','2차활용':'♻️ 2차 활용','zvzo':'🔗 zvzo','브랜더진':'🏷 브랜더진','⭐즐겨찾기':'⭐ 즐겨찾기'};
-  // 주차별로 묶기 (발송/배송완료된 인원만 대상, 단 즐겨찾기 탭은 전체 인원 대상)
-  const weekGroups=[];
+
+  // 주간 리스트에 등록된 모든 핸들(정규화) - 캠페인/협업 인원 중복 방지용
+  const weeklyHandleKeys=new Set();
+  DB.weekly.forEach(function(w){ w.people.forEach(function(p){ weeklyHandleKeys.add(normH(p.handle)); }); });
+
+  const groups=[];
+
+  // 1) 주차별 그룹 (기존 로직)
   [...DB.weekly].sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(w){
     let people=(w.people||[]);
     if(_galleryCat==='⭐즐겨찾기'){
@@ -1686,21 +1692,50 @@ function pgExposureGallery(){
       }
     }
     const items=people.map(function(p){
-      return {p:p,w:w,urls:getPostUrls(p),posted:getPostUrls(p).length>0};
+      return {handle:p.handle,product:(p.products||[p.product]).filter(Boolean).join(', ')||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'weekly',wid:w.id,pid:p.id}};
     });
-    if(items.length) weekGroups.push({w:w,items:items});
+    if(items.length) groups.push({key:'w-'+w.id,label:'🗓 '+getMonthRound(w.id),dateLabel:w.date,items:items});
   });
-  let totalPosted=0,totalPending=0;
-  weekGroups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
 
-  // 기본 펼침 상태: 대기 인원이 있는 주차 + 가장 최근 주차만 펼침, 나머지는 접힘
-  if(_galleryExpanded===null){
-    _galleryExpanded={};
-    weekGroups.forEach(function(g,i){
-      const hasPending=g.items.some(function(x){return !x.posted;});
-      _galleryExpanded[g.w.id]=hasPending||i===0;
+  // 2) 캠페인(릴스/2차 활용) 인원 중 주간 리스트에 없는 사람들
+  if(_galleryCat!=='⭐즐겨찾기'&&_galleryCat!=='zvzo'&&_galleryCat!=='브랜더진'){
+    DB.campaigns.forEach(function(c){
+      const wantType=_galleryCat==='전체'?null:(_galleryCat==='릴스캠페인'?'릴스':'2차 활용');
+      if(wantType&&c.type!==wantType) return;
+      if(!wantType&&c.type!=='릴스'&&c.type!=='2차 활용') return;
+      const extra=(c.people||[]).filter(function(p){ return !weeklyHandleKeys.has(normH(p.handle)); });
+      if(!extra.length) return;
+      const items=extra.map(function(p){
+        return {handle:p.handle,product:p.product||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'campaign',cid:c.id,pid:p.id}};
+      });
+      groups.push({key:'c-'+c.id,label:(c.type==='릴스'?'🎬 ':'♻️ ')+c.name+' '+c.round+'차',dateLabel:c.date,items:items});
     });
   }
+
+  // 3) zvzo/브랜더진 협업 인원 중 주간 리스트에 없는 사람들
+  if(_galleryCat!=='⭐즐겨찾기'&&_galleryCat!=='릴스캠페인'&&_galleryCat!=='2차활용'){
+    ['zvzo','브랜더진'].forEach(function(brand){
+      if(_galleryCat!=='전체'&&_galleryCat!==brand) return;
+      const extra=(DB.collabs||[]).filter(function(item){ return item.brand===brand&&!weeklyHandleKeys.has(normH(item.handle))&&!weeklyHandleKeys.has(normH(item.name)); });
+      if(!extra.length) return;
+      const items=extra.map(function(item){
+        return {handle:item.name+(item.handle?' ('+item.handle+')':''),product:item.product||'-',urls:getPostUrls(item),posted:getPostUrls(item).length>0,src:{type:'collab',id:item.id}};
+      });
+      groups.push({key:'collab-'+brand,label:(brand==='zvzo'?'🔗 ':'🏷 ')+brand+' 협업',dateLabel:'',items:items});
+    });
+  }
+
+  let totalPosted=0,totalPending=0;
+  groups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
+
+  if(_galleryExpanded===null){
+    _galleryExpanded={};
+    groups.forEach(function(g,i){
+      const hasPending=g.items.some(function(x){return !x.posted;});
+      _galleryExpanded[g.key]=hasPending||i===0;
+    });
+  }
+  groups.forEach(function(g){ if(!(g.key in _galleryExpanded)) _galleryExpanded[g.key]=g.items.some(function(x){return !x.posted;}); });
 
   pg.innerHTML=`
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
@@ -1715,25 +1750,24 @@ function pgExposureGallery(){
       return `<button onclick="setGalleryCat('${cat}')" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
     }).join('')}
   </div>
-  ${weekGroups.length===0?`<div class="nodata" style="margin-top:60px">${_galleryCat==='⭐즐겨찾기'?'⭐ 표시한 사람이 아직 없어요. 주간 리스트에서 별표를 눌러보세요':'배송완료 처리된 인원이 여기 주차별로 자동 표시돼요'}</div>`:
-  weekGroups.map(function(g){
-    const w=g.w;
+  ${groups.length===0?`<div class="nodata" style="margin-top:60px">${_galleryCat==='⭐즐겨찾기'?'⭐ 표시한 사람이 아직 없어요. 주간 리스트에서 별표를 눌러보세요':'배송완료 처리된 인원, 또는 캠페인/협업 인원이 여기 자동 표시돼요'}</div>`:
+  groups.map(function(g){
     const postedCnt=g.items.filter(function(x){return x.posted;}).length;
     const total=g.items.length;
     const allDone=postedCnt===total;
-    const open=!!_galleryExpanded[w.id];
+    const open=!!_galleryExpanded[g.key];
     return `
     <div class="tw" style="margin-bottom:14px">
-      <div class="tw-h" style="align-items:center;cursor:pointer" onclick="toggleWeekGallery('${w.id}')">
-        <h3>${open?'▾':'▸'} 🗓 ${getMonthRound(w.id)} <span style="font-weight:400;color:#999;font-size:12px">(${w.date})</span></h3>
+      <div class="tw-h" style="align-items:center;cursor:pointer" onclick="toggleWeekGallery('${g.key}')">
+        <h3>${open?'▾':'▸'} ${g.label} ${g.dateLabel?'<span style="font-weight:400;color:#999;font-size:12px">('+g.dateLabel+')</span>':''}</h3>
         <span class="sub" style="background:${allDone?'#D1FAE5':'#FEF3C7'};color:${allDone?'#065F46':'#92400E'};padding:3px 10px;border-radius:20px;font-weight:700">게시완료 ${postedCnt}/${total}</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px 4px">
-        ${g.items.map(function(x){
-          const p=x.p;
+        ${g.items.map(function(x,idx){
+          const rowId='pend-row-'+g.key.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+idx;
           return x.posted
-            ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#D1FAE5;color:#065F46;font-weight:600">✅ ${e(p.handle)}${x.urls.length>1?' ×'+x.urls.length:''}</span>`
-            : `<span onclick="event.stopPropagation();_galleryExpanded['${w.id}']=true;pgExposureGallery();setTimeout(()=>document.getElementById('pend-row-${p.id}')?.scrollIntoView({behavior:'smooth',block:'center'}),50)" style="cursor:pointer;font-size:11px;padding:4px 10px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:600">⏳ ${e(p.handle)}</span>`;
+            ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#D1FAE5;color:#065F46;font-weight:600">✅ ${e(x.handle)}${x.urls.length>1?' ×'+x.urls.length:''}</span>`
+            : `<span onclick="event.stopPropagation();_galleryExpanded['${g.key}']=true;pgExposureGallery();setTimeout(()=>document.getElementById('${rowId}')?.scrollIntoView({behavior:'smooth',block:'center'}),50)" style="cursor:pointer;font-size:11px;padding:4px 10px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:600">⏳ ${e(x.handle)}</span>`;
         }).join('')}
       </div>
       ${!open?'':(g.items.some(function(x){return !x.posted;})?`
@@ -1741,15 +1775,17 @@ function pgExposureGallery(){
         <table>
           <thead><tr><th>활동명</th><th>제품</th><th style="min-width:260px">게시물 링크 입력 (여러 개면 줄바꿈)</th></tr></thead>
           <tbody>
-          ${g.items.filter(function(x){return !x.posted;}).map(function(x){
-            const p=x.p;
-            return `<tr id="pend-row-${p.id}">
-              <td style="font-weight:700">${e(p.handle)}</td>
-              <td style="font-size:11px;max-width:150px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'}</td>
+          ${g.items.map(function(x,idx){return {x:x,idx:idx};}).filter(function(o){return !o.x.posted;}).map(function(o){
+            const x=o.x,idx=o.idx;
+            const rowId='pend-row-'+g.key.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+idx;
+            const inputId='quick-url-'+rowId;
+            return `<tr id="${rowId}">
+              <td style="font-weight:700">${e(x.handle)}</td>
+              <td style="font-size:11px;max-width:150px">${e(x.product)}</td>
               <td>
                 <div style="display:flex;gap:6px">
-                  <textarea id="quick-url-${p.id}" rows="1" placeholder="https://www.instagram.com/p/... (줄바꿈으로 여러개)" style="flex:1;padding:5px 8px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical"></textarea>
-                  <button class="btn sm pri" data-wid="${w.id}" data-pid="${p.id}" onclick="quickSetPostUrl(this.dataset.wid,this.dataset.pid)">등록</button>
+                  <textarea id="${inputId}" rows="1" placeholder="https://www.instagram.com/p/... (줄바꿈으로 여러개)" style="flex:1;padding:5px 8px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical"></textarea>
+                  <button class="btn sm pri" onclick='quickSetPostUrlGeneric(${JSON.stringify(x.src)},"${inputId}")'>등록</button>
                 </div>
               </td>
             </tr>`;
@@ -1760,7 +1796,6 @@ function pgExposureGallery(){
       ${!open?'':(g.items.some(function(x){return x.posted;})?`
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;padding:4px 16px 16px">
         ${g.items.filter(function(x){return x.posted;}).flatMap(function(x){
-          const p=x.p;
           return x.urls.map(function(url,idx){
             const eng=getEngagement(url);
             const shot=getScreenshot(url);
@@ -1775,8 +1810,7 @@ function pgExposureGallery(){
                 &nbsp;·&nbsp; 💬 ${last.comments.toLocaleString()}${h.length>1?`<span style="color:${cmtDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${cmtDiff>=0?'+':''}${cmtDiff})</span>`:''}
                 <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
             }
-            const uid_=p.id+'-'+idx;
-            // 캡처된 이미지가 있으면 그걸 기본으로 보여주고(누르면 원본 링크로 이동), 아직 캡처 전이면 실시간 임베드로 대체 표시
+            const uid_=(x.src.wid||x.src.cid||x.src.id||'x')+'-'+(x.src.pid||'')+'-'+idx;
             const embedHtml=shot
               ? `<a href="${e(url)}" target="_blank" style="display:block;text-decoration:none"><img src="${e(shot.url)}" style="width:100%;display:block" loading="lazy"></a>`
               : isYoutubeUrl(url)
@@ -1785,13 +1819,13 @@ function pgExposureGallery(){
             return `<div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden">
               ${embedHtml}
               <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
-                <div style="font-weight:700;font-size:13px">${e(p.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
-                <div style="font-size:11px;color:#888;margin:2px 0 8px">${(p.products||[p.product]).filter(Boolean).join(', ')||'-'}</div>
+                <div style="font-weight:700;font-size:13px">${e(x.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
+                <div style="font-size:11px;color:#888;margin:2px 0 8px">${e(x.product)}</div>
                 <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
                 <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
                   <input type="number" id="eng-like-${uid_}" placeholder="❤️ 좋아요" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
                   <input type="number" id="eng-cmt-${uid_}" placeholder="💬 댓글" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
-                  <button class="btn sm pri" data-url="${e(url)}" data-handle="${e(p.handle)}" data-uid="${uid_}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.uid)">기록</button>
+                  <button class="btn sm pri" data-url="${e(url)}" data-handle="${e(x.handle)}" data-uid="${uid_}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.uid)">기록</button>
                 </div>
               </div>
             </div>`;
@@ -1801,6 +1835,22 @@ function pgExposureGallery(){
     </div>`;
   }).join('')}`;
   ensureIgEmbedScript(function(){ if(window.instgrm) window.instgrm.Embeds.process(); });
+}
+
+function quickSetPostUrlGeneric(src,inputId){
+  const input=document.getElementById(inputId);
+  const urls=input.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!urls.length){ toast('링크를 입력해주세요'); return; }
+  let target=null;
+  if(src.type==='weekly') target=DB.weekly.find(x=>x.id===src.wid)?.people.find(x=>x.id===src.pid);
+  else if(src.type==='campaign') target=DB.campaigns.find(x=>x.id===src.cid)?.people.find(x=>x.id===src.pid);
+  else if(src.type==='collab') target=(DB.collabs||[]).find(x=>x.id===src.id);
+  if(!target){ toast('대상을 찾을 수 없어요'); return; }
+  target.postUrls=getPostUrls(target).concat(urls.filter(u=>!getPostUrls(target).includes(u)));
+  delete target.postUrl;
+  save();
+  toast('게시물 등록됨');
+  pgExposureGallery();
 }
 
 function openBulkPostUrl(){
@@ -2323,8 +2373,9 @@ function pgCollabTab(brand, subHtml){
     var ct=item.contentType||collabTypeOpts(item.brand)[0];
     var ctBg=ct==='릴스'?'#EEF2FF':'#D1FAE5';
     var ctColor=ct==='릴스'?'#3730A3':'#065F46';
+    var links=getPostUrls(item).map(function(u){return ' <a href="'+e(u)+'" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>';}).join('');
     return '<tr>'
-      +'<td><div style="font-weight:600">'+item.name+'</div>'+(item.handle?'<div style="font-size:11px;color:#888">@'+item.handle+'</div>':'')+'</td>'
+      +'<td><div style="font-weight:600">'+item.name+links+'</div>'+(item.handle?'<div style="font-size:11px;color:#888">@'+item.handle+'</div>':'')+'</td>'
       +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+ctBg+';color:'+ctColor+'">'+ct+'</span></td>'
       +'<td style="font-size:12px">'+(item.product||'-')+'</td>'
       +'<td>'+item.startDate+'</td>'
@@ -2350,6 +2401,7 @@ function openAddCollab(brand){
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
     +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+d+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+d+'"></div></div>'
+    +'<div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(여러 개면 줄바꿈)</span></label><textarea id="cl8" rows="2" placeholder="https://www.instagram.com/p/..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>'
     +'<div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div>'
     +'</div>'
     +'<div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-brand="'+brand+'" onclick="saveAddCollab(this.dataset.brand)">추가</button></div>');
@@ -2357,7 +2409,7 @@ function openAddCollab(brand){
 
 function saveAddCollab(brand){
   var name=g('cl1').trim();if(!name){alert('협업자 이름 필수');return;}
-  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),note:g('cl6').trim()};
+  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),postUrls:g('cl8').split('\n').map(s=>s.trim()).filter(Boolean),note:g('cl6').trim()};
   if(!DB.collabs) DB.collabs=[];
   DB.collabs.push(item);
   save();cm();toast(name+' 협업 추가됨');
@@ -2375,6 +2427,7 @@ function openEditCollab(id){
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" value="'+e(item.name)+'"></div><div class="fr"><label>채널 아이디</label><input id="cl2" value="'+e(item.handle||'')+'"></div></div>'
     +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+item.startDate+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+item.endDate+'"></div></div>'
+    +'<div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(여러 개면 줄바꿈)</span></label><textarea id="cl8" rows="2" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px">'+e(getPostUrls(item).join('\n'))+'</textarea></div>'
     +'<div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div>'
     +'</div>'
     +'<div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-id="'+id+'" onclick="saveEditCollab(this.dataset.id)">저장</button></div>');
@@ -2383,7 +2436,7 @@ function openEditCollab(id){
 function saveEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
   item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();item.contentType=g('cl7')||collabTypeOpts(item.brand)[0];
-  item.startDate=g('cl4');item.endDate=g('cl5');item.note=g('cl6').trim();
+  item.startDate=g('cl4');item.endDate=g('cl5');item.postUrls=g('cl8').split('\n').map(s=>s.trim()).filter(Boolean);delete item.postUrl;item.note=g('cl6').trim();
   save();cm();toast('수정됨');pgCampaign();
 }
 
@@ -2454,6 +2507,7 @@ function openAddCP(cid){
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" placeholder="0"></div><div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div></div>
     <div class="fr"><label>제품</label><input id="fp1" placeholder="제품명"></div>
     <div class="fr"><label>배송지</label><input id="fa" placeholder="서울시..."></div>
+    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(인스타/유튜브, 여러 개면 줄바꿈)</span></label><textarea id="fpost" rows="2" placeholder="https://www.instagram.com/p/..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>
     <div class="fg">
       <div class="fr"><label>발송일 <span style="color:#52B788;font-size:10px">(이카운트 출고)</span></label><input id="fsend" type="date" value="${today()}"></div>
       <div class="fr"><label>업로드일 <span style="color:#3B82F6;font-size:10px">(콘텐츠 게시)</span></label><input id="fupload" type="date" value="${today()}"></div>
@@ -2463,7 +2517,7 @@ function openAddCP(cid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCP('${cid}')">추가</button></div>`);
 }
-function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),product:g('fp1'),address:g('fa'),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),product:g('fp1'),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 function openEditCP(cid,pid){
   const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;
@@ -2474,6 +2528,7 @@ function openEditCP(cid,pid){
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div></div>
     <div class="fr"><label>제품</label><input id="fp1" value="${e(p.product)}"></div>
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
+    <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(인스타/유튜브, 여러 개면 줄바꿈)</span></label><textarea id="fpost" rows="2" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px">${e(getPostUrls(p).join('\n'))}</textarea></div>
     <div class="fg">
       <div class="fr"><label>발송일 <span style="color:#52B788;font-size:10px">(이카운트 출고)</span></label><input id="fsend" type="date" value="${p.sendDate||''}"></div>
       <div class="fr"><label>업로드일 <span style="color:#3B82F6;font-size:10px">(콘텐츠 게시)</span></label><input id="fupload" type="date" value="${p.uploadDate||''}"></div>
@@ -2483,7 +2538,7 @@ function openEditCP(cid,pid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCP('${cid}','${pid}')">저장</button></div>`);
 }
-function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');p.product=g('fp1');p.address=g('fa');p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');p.product=g('fp1');p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // ══════════════════════════════
 //  UPDATE / DELETE

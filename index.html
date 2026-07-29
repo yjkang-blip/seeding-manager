@@ -217,6 +217,13 @@ document.addEventListener('touchmove',e=>{
 document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
 var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[],galleryHidden:[]};
 var cur={tab:'dash',campType:'릴스',id:null,expView:'list'};
+let _weeklyProject='기본'; // 주간 리스트 프로젝트 구분 (기본/백팩)
+function setWeeklyProject(p){
+  _weeklyProject=p;
+  cur.id=null; // 프로젝트 전환 시 상세 화면 닫고 목록으로
+  renderSB();
+  renderPage();
+}
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
 
@@ -517,9 +524,18 @@ function renderSB(){
     el.innerHTML=h;return;
   }
   if(t==='weekly'){
-    // 월별로 그룹핑
+    // 프로젝트 전환 탭 (기본 시딩 / 백팩 시딩)
+    h+=`<div style="display:flex;gap:4px;padding:0 4px 10px">
+      <button onclick="setWeeklyProject('기본')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='기본'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">기본 시딩</button>
+      <button onclick="setWeeklyProject('백팩')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='백팩'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">🎒 백팩 시딩</button>
+    </div>
+    <div style="padding:0 4px 10px">
+      <input type="text" id="sbWeeklySearchInput" oninput="sbWeeklySearch(this.value)" placeholder="🔍 활동명 검색 (전체)" style="width:100%;padding:7px 10px;border:none;border-radius:8px;font-size:12px;font-family:inherit;background:rgba(255,255,255,.9)">
+      <div id="sbWeeklySearchResult"></div>
+    </div>`;
+    // 월별로 그룹핑 (현재 선택된 프로젝트만)
     const grouped={};
-    DB.weekly.forEach(w=>{
+    DB.weekly.filter(w=>(w.project||'기본')===_weeklyProject).forEach(w=>{
       const ym=w.date.slice(0,7);
       if(!grouped[ym])grouped[ym]=[];
       grouped[ym].push(w);
@@ -541,7 +557,7 @@ function renderSB(){
         </button>`;
       });
     });
-    h+=`<button class="sb-add" onclick="openAddW()">＋ 새 주간 리스트</button>`;
+    h+=`<button class="sb-add" onclick="openAddW()">＋ 새 ${_weeklyProject==='백팩'?'🎒 백팩 ':''}주간 리스트</button>`;
   } else if(t==='monthly'){
     h+=`<div class="sb-ttl">월간 리스트</div>`;
     [...DB.monthly].sort((a,b)=>b.month.localeCompare(a.month)).forEach(m=>{
@@ -1119,23 +1135,25 @@ function costParseXlsx(input,month){
 // ── 대시보드 ──
 function pgDash(){
   const total=DB.weekly.reduce((a,w)=>a+w.people.length,0);
+  const basicTotal=DB.weekly.filter(w=>(w.project||'기본')==='기본').reduce((a,w)=>a+w.people.length,0);
+  const backpackTotal=DB.weekly.filter(w=>w.project==='백팩').reduce((a,w)=>a+w.people.length,0);
   const totalF=DB.weekly.flatMap(w=>w.people).reduce((a,p)=>a+(p.followers||0),0);
   const totalFee=DB.campaigns.flatMap(c=>c.people).reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
-  const recent=[...DB.weekly].sort((a,b)=>b.round-a.round).slice(0,5);
+  const recent=[...DB.weekly].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   const recentC=[...DB.campaigns].filter(c=>c.type==='릴스').sort((a,b)=>b.round-a.round).slice(0,3);
   const sec=DB.campaigns.find(c=>c.type==='2차 활용');
   document.getElementById('nav-act').innerHTML=`<button class="btn" style="font-size:11px;color:#999" onclick="resetData()" title="데이터 초기화 (주의: 모든 데이터가 기본값으로 리셋됩니다)">🔄 데이터 초기화</button>`;
   document.getElementById('page').innerHTML=`
   <div class="stats">
-    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">${DB.weekly.length}차 누적</div></div>
+    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">기본 ${basicTotal}명 · 🎒 백팩 ${backpackTotal}명</div></div>
     <div class="sc"><div class="sc-l">총 팔로워 도달</div><div class="sc-n">${Math.round(totalF/10000)}<small>만</small></div></div>
     <div class="sc"><div class="sc-l">캠페인 유형</div><div class="sc-n">${new Set(DB.campaigns.map(c=>c.type)).size}<small>종</small></div><div class="sc-s">릴스 · 2차 활용</div></div>
     <div class="sc"><div class="sc-l">캠페인 비용</div><div class="sc-n">${totalFee}<small>만원</small></div></div>
   </div>
   <div class="dbgrid">
     <div class="dc"><h3>최근 주간 리스트</h3>
-      ${recent.map(w=>`<div class="ri" onclick="selW('${w.id}')">
-        <div class="ri-ico">${getMonthRound(w.id).replace(/\d+월 /,'')}</div>
+      ${recent.map(w=>`<div class="ri" onclick="setWeeklyProject('${w.project||'기본'}');selW('${w.id}')">
+        <div class="ri-ico">${(w.project==='백팩'?'🎒':getMonthRound(w.id).replace(/🎒 |\d+월 /g,''))}</div>
         <div><div class="rin">${getMonthRound(w.id)}</div><div class="ris">${w.date}</div></div>
         <span class="ribk">${w.people.length}명</span>
       </div>`).join('')}
@@ -1157,13 +1175,14 @@ function pgDash(){
 }
 
 // ── 주간 리스트 ──
-function weeklySearch(q){
-  const resultEl=document.getElementById('weeklySearchResult');
+function sbWeeklySearch(q){
+  const resultEl=document.getElementById('sbWeeklySearchResult');
+  if(!resultEl) return;
   q=q.trim();
   if(!q){ resultEl.innerHTML=''; return; }
   const key=normH(q);
   const matches=[];
-  [...DB.weekly].sort((a,b)=>b.round-a.round).forEach(function(w){
+  [...DB.weekly].sort((a,b)=>b.date.localeCompare(a.date)).forEach(function(w){
     w.people.forEach(function(p){
       if(normH(p.handle).includes(key)||(p.realname&&normH(p.realname).includes(key))){
         matches.push({w:w,p:p});
@@ -1171,44 +1190,38 @@ function weeklySearch(q){
     });
   });
   if(matches.length===0){
-    resultEl.innerHTML=`<div style="padding:14px 16px;color:#aaa;font-size:13px;border-top:1px solid #f0f0f0">"${e(q)}" 검색 결과 없음</div>`;
+    resultEl.innerHTML=`<div style="padding:8px 6px;color:rgba(255,255,255,.5);font-size:11px">검색 결과 없음</div>`;
     return;
   }
-  resultEl.innerHTML=`<div style="border-top:1px solid #f0f0f0">
-    ${matches.map(function(m){
-      return `<div onclick="selW('${m.w.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f8fbf8'" onmouseout="this.style.background=''">
-        <span style="font-weight:700;font-size:13px;flex:1">${e(m.p.handle)}${m.p.realname?` <span style="font-weight:400;color:#aaa;font-size:11px">(${e(m.p.realname)})</span>`:''}</span>
-        <span style="font-size:11px;color:#3730A3;background:#EEF2FF;padding:3px 9px;border-radius:20px;font-weight:600">${getMonthRound(m.w.id)}</span>
-        <span style="font-size:11px;color:#888">${m.w.date}</span>
-        <span style="font-size:11px;color:${m.p.shipped?'#065F46':'#D97706'}">${m.p.shipped?'배송완료':'배송전'}</span>
-        <span style="font-size:11px;color:#3730A3">→</span>
-      </div>`;
-    }).join('')}
-  </div>`;
+  resultEl.innerHTML=matches.slice(0,30).map(function(m){
+    const proj=m.w.project||'기본';
+    return `<div onclick="setWeeklyProject('${proj}');selW('${m.w.id}')" style="padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,.06);margin-top:4px">
+      <div style="font-size:12px;font-weight:700;color:#fff">${e(m.p.handle)}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:1px">${proj==='백팩'?'🎒 ':''}${getMonthRound(m.w.id).replace('🎒 ','')} · ${m.w.date.slice(5)}</div>
+    </div>`;
+  }).join('');
 }
 function pgWeekly(){
   const w=cur.id?DB.weekly.find(x=>x.id===cur.id):null;
   if(!w){
-    const sorted=[...DB.weekly].sort((a,b)=>b.round-a.round);
-    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddW()">＋ 새 주간 리스트</button>`;
+    const projWeekly=DB.weekly.filter(x=>(x.project||'기본')===_weeklyProject);
+    const sorted=[...projWeekly].sort((a,b)=>b.round-a.round);
+    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddW()">＋ 새 ${_weeklyProject==='백팩'?'🎒 백팩 ':''}주간 리스트</button>`;
     document.getElementById('page').innerHTML=`
-    <div class="stats">
-      <div class="sc"><div class="sc-l">총 차수</div><div class="sc-n">${DB.weekly.length}<small>차</small></div></div>
-      <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${DB.weekly.reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
-      <div class="sc"><div class="sc-l">이번달</div><div class="sc-n">${DB.weekly.filter(w=>w.date.startsWith(new Date().toISOString().slice(0,7))).reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
-      <div class="sc"><div class="sc-l">최근 차수</div><div class="sc-n" style="font-size:14px">${DB.weekly.length?getMonthRound(DB.weekly.reduce((a,b)=>a.round>b.round?a:b).id):'-'}</div></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">${_weeklyProject==='백팩'?'🎒 백팩 시딩':'기본 시딩'}</h2>
     </div>
-    <div class="tw" style="margin-bottom:14px">
-      <div style="padding:14px 16px">
-        <input type="text" id="weeklySearchInput" oninput="weeklySearch(this.value)" placeholder="🔍 활동명으로 검색 (전체 차수에서 찾기)" style="width:100%;padding:9px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit">
-      </div>
-      <div id="weeklySearchResult"></div>
+    <div class="stats">
+      <div class="sc"><div class="sc-l">총 차수</div><div class="sc-n">${projWeekly.length}<small>차</small></div></div>
+      <div class="sc"><div class="sc-l">총 인원</div><div class="sc-n">${projWeekly.reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
+      <div class="sc"><div class="sc-l">이번달</div><div class="sc-n">${projWeekly.filter(w=>w.date.startsWith(new Date().toISOString().slice(0,7))).reduce((a,w)=>a+w.people.length,0)}<small>명</small></div></div>
+      <div class="sc"><div class="sc-l">최근 차수</div><div class="sc-n" style="font-size:14px">${projWeekly.length?getMonthRound(projWeekly.reduce((a,b)=>a.round>b.round?a:b).id):'-'}</div></div>
     </div>
     <div class="tw">
       <div class="tw-h"><h3>전체 주간 리스트</h3><span class="sub">차수/날짜 직접 수정 가능</span></div>
       <div class="tsc"><table>
         <thead><tr><th>차수</th><th>날짜</th><th>인원</th><th>팔로워 합계</th><th></th></tr></thead>
-        <tbody>${sorted.map(w=>`<tr>
+        <tbody>${sorted.length===0?`<tr><td colspan="5" class="nodata">${_weeklyProject==='백팩'?'🎒 백팩 시딩 차수가 아직 없어요. 위 버튼으로 추가해보세요':'주간 리스트를 추가해주세요'}</td></tr>`:sorted.map(w=>`<tr>
           <td><input type="number" value="${w.round}" min="1" style="width:50px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updWRound('${w.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
           <td><input type="date" value="${w.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updWDate('${w.id}',this.value)"></td>
           <td>${w.people.length}명</td>
@@ -1227,6 +1240,7 @@ function pgWeekly(){
     `<div class="dw"><span>날짜</span><input type="date" value="${w.date}" onchange="updWDate('${w.id}',this.value)"></div>
      <button class="btn pri" onclick="openAddP('${w.id}')">＋ 인원 추가</button>
      <button class="btn" onclick="openPaste('${w.id}')">📋 붙여넣기</button>
+     <button class="btn" onclick="openImportP('${w.id}')" style="background:#F0FDF4;color:#166534;border-color:#BBF7D0;font-weight:600">📥 기존 인원 가져오기</button>
      <button class="btn" onclick="openMoveP('${w.id}')" style="background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE;font-weight:600">↗ 차수 이동</button>
      <button class="btn suc" onclick="expW('${w.id}')">⬇ 시딩 엑셀</button>
      <button class="btn" style="background:#FFF7ED;color:#C2410C;border-color:#FED7AA;font-weight:600" onclick="expOrder('${w.id}')">📦 로젠 발주서</button>
@@ -1265,7 +1279,7 @@ function pgWeekly(){
                 ${shipped?'배송완료':'배송대기'}
               </button>
             </td>
-            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}"><span onclick="event.stopPropagation();toggleFavorite('${w.id}','${p.id}')" style="cursor:pointer;font-size:12px;margin-right:2px" title="즐겨찾기">${p.favorite?'⭐':'☆'}</span>${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):shipped?` <span title="배송완료지만 아직 게시물 링크 없음" style="font-size:10px;color:#D97706">⏳</span>`:''}</td>
+            <td style="font-weight:700;${shipped?'color:#aaa;text-decoration:line-through':''}"><span onclick="event.stopPropagation();toggleFavorite('${w.id}','${p.id}')" style="cursor:pointer;font-size:12px;margin-right:2px" title="즐겨찾기">${p.favorite?'⭐':'☆'}</span>${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):shipped?` <span title="배송완료지만 아직 게시물 링크 없음" style="font-size:10px;color:#D97706">⏳</span>`:''} <span onclick="event.stopPropagation();openQuickSend('${w.id}','${p.id}')" style="cursor:pointer;font-size:11px" title="다른 시딩(프로젝트)으로 복사">📤</span></td>
             <td style="min-width:150px">${badges||'<span style="font-size:10px;color:#ccc">—</span>'}${dropdown}</td>
             <td>${p.url?`<a href="${e(p.url)}" target="_blank">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
             <td>${p.followers?p.followers.toLocaleString():'-'}</td>
@@ -2075,16 +2089,161 @@ const cm=()=>document.getElementById('ov').classList.remove('open');
 document.getElementById('ov').addEventListener('click',ev=>{if(ev.target===document.getElementById('ov')&&!_isDragging)cm();});
 
 // 주간 추가
+function openQuickSend(wid,pid){
+  const w=DB.weekly.find(x=>x.id===wid); const p=w&&w.people.find(x=>x.id===pid);
+  if(!p) return;
+  const curProj=w.project||'기본';
+  const otherProj=curProj==='백팩'?'기본':'백팩';
+  om(`<div class="mh"><h3>📤 ${e(p.handle)} 다른 시딩으로 복사</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <p style="font-size:12px;color:#888;margin-bottom:14px">원본(${curProj==='백팩'?'🎒 백팩':'기본'} 시딩)은 그대로 두고, 복사본이 새로 만들어져요. 배송완료/게시물 링크는 새로 초기화돼요.</p>
+    <button class="btn pri" style="width:100%;margin-bottom:8px;padding:12px;font-size:14px" data-wid="${wid}" data-pid="${pid}" data-proj="${otherProj}" onclick="quickSendExecute(this.dataset.wid,this.dataset.pid,this.dataset.proj)">${otherProj==='백팩'?'🎒 백팩 시딩':'기본 시딩'} 최신 차수로 복사</button>
+    <button class="btn" style="width:100%" data-wid="${wid}" data-pid="${pid}" onclick="cm();openSendToRound(this.dataset.wid,this.dataset.pid)">다른 차수 직접 선택...</button>
+  </div>`);
+}
+function quickSendExecute(wid,pid,targetProject){
+  const w=DB.weekly.find(x=>x.id===wid); const p=w&&w.people.find(x=>x.id===pid);
+  if(!p) return;
+  let target=[...DB.weekly].filter(x=>(x.project||'기본')===targetProject).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  if(!target){
+    const round=nextRoundForProject(targetProject);
+    target={id:'w'+uid(),round,date:today(),project:targetProject,people:[]};
+    DB.weekly.push(target);
+  }
+  target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[]});
+  save();cm();
+  toast(`${p.handle} → ${targetProject==='백팩'?'🎒 백팩':'기본'} 시딩으로 복사됨`);
+  renderSB();renderPage();
+}
+function openSendToRound(wid,pid){
+  const w=DB.weekly.find(x=>x.id===wid); const p=w&&w.people.find(x=>x.id===pid);
+  if(!p) return;
+  const targets=[...DB.weekly].filter(x=>x.id!==wid).sort((a,b)=>b.date.localeCompare(a.date));
+  const optHtml=targets.map(t=>`<option value="${t.id}">${(t.project==='백팩'?'🎒 백팩 ':'기본 ')}${getMonthRound(t.id).replace('🎒 ','')} (${t.date})</option>`).join('');
+  om(`<div class="mh"><h3>📤 ${e(p.handle)} 차수 선택해서 복사</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>복사할 차수</label>
+      <select id="qsTarget" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit">${optHtml}<option value="__new__">+ 새 차수 만들기</option></select>
+    </div>
+    <div class="fg" id="qsNewWrap" style="display:none">
+      <div class="fr"><label>프로젝트</label><select id="qsNewProject"><option value="기본">기본 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>
+      <div class="fr"><label>날짜</label><input id="qsNewDate" type="date" value="${today()}"></div>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-wid="${wid}" data-pid="${pid}" onclick="executeSendToRound(this.dataset.wid,this.dataset.pid)">복사</button></div>`);
+  document.getElementById('qsTarget').addEventListener('change',function(){
+    document.getElementById('qsNewWrap').style.display=this.value==='__new__'?'':'none';
+  });
+}
+function executeSendToRound(wid,pid){
+  const w=DB.weekly.find(x=>x.id===wid); const p=w&&w.people.find(x=>x.id===pid);
+  if(!p) return;
+  const targetId=g('qsTarget');
+  let target;
+  if(targetId==='__new__'){
+    const proj=g('qsNewProject')||'기본';
+    const date=g('qsNewDate');
+    target={id:'w'+uid(),round:nextRoundForProject(proj),date,project:proj,people:[]};
+    DB.weekly.push(target);
+  } else {
+    target=DB.weekly.find(x=>x.id===targetId);
+  }
+  target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[]});
+  save();cm();
+  toast(`${p.handle} → ${(target.project==='백팩'?'🎒 백팩':'기본')} ${target.round}차로 복사됨`);
+  renderSB();renderPage();
+}
+function openImportP(targetWid){
+  const rounds=[...DB.weekly].filter(w=>w.id!==targetWid&&w.people.length>0).sort((a,b)=>b.date.localeCompare(a.date));
+  const optHtml=rounds.map(w=>`<option value="${w.id}">${(w.project==='백팩'?'🎒 백팩 ':'기본 ')}${getMonthRound(w.id).replace('🎒 ','')} (${w.date}) · ${w.people.length}명</option>`).join('');
+  om(`<div class="mh"><h3>📥 기존 인원 가져오기</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>어느 차수에서 가져올까요?</label>
+      <select id="impRound" onchange="renderImportPeopleList('${targetWid}',this.value)" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit">
+        <option value="">차수 선택...</option>
+        ${optHtml}
+      </select>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px">
+      <span style="font-size:12px;color:#888">인원 선택</span>
+      <span>
+        <button class="btn sm" onclick="toggleAllImportP(true)">전체선택</button>
+        <button class="btn sm" onclick="toggleAllImportP(false)">전체해제</button>
+      </span>
+    </div>
+    <div id="importPeopleList" style="max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px">
+      <div style="padding:20px;text-align:center;color:#bbb;font-size:12px">위에서 차수를 먼저 선택해주세요</div>
+    </div>
+    <div style="font-size:11px;color:#888;margin-top:8px">💡 배송완료/게시물 링크는 새로 초기화되고, 활동명·연락처·주소 등 기본 정보만 복사돼요.</div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="applyImportP('${targetWid}')">선택 인원 가져오기</button></div>`);
+}
+function renderImportPeopleList(targetWid,srcWid){
+  const el=document.getElementById('importPeopleList');
+  if(!srcWid){ el.innerHTML=`<div style="padding:20px;text-align:center;color:#bbb;font-size:12px">위에서 차수를 먼저 선택해주세요</div>`; return; }
+  const src=DB.weekly.find(w=>w.id===srcWid);
+  if(!src||!src.people.length){ el.innerHTML=`<div style="padding:20px;text-align:center;color:#bbb;font-size:12px">인원이 없어요</div>`; return; }
+  el.innerHTML=src.people.map(p=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #f5f5f5;font-size:13px;cursor:pointer">
+    <input type="checkbox" class="imp-chk" data-pid="${p.id}">
+    <span style="font-weight:600">${e(p.handle)}</span>
+    <span style="color:#aaa;font-size:11px">${(p.products||[p.product]).filter(Boolean).join(', ')||''}</span>
+  </label>`).join('');
+}
+function toggleAllImportP(check){
+  document.querySelectorAll('.imp-chk').forEach(el=>el.checked=check);
+}
+function applyImportP(targetWid){
+  const srcWid=g('impRound');
+  if(!srcWid){ toast('차수를 선택해주세요'); return; }
+  const src=DB.weekly.find(w=>w.id===srcWid);
+  const target=DB.weekly.find(w=>w.id===targetWid);
+  if(!src||!target) return;
+  const checkedIds=[...document.querySelectorAll('.imp-chk:checked')].map(el=>el.dataset.pid);
+  if(checkedIds.length===0){ toast('가져올 인원을 선택해주세요'); return; }
+  let count=0;
+  checkedIds.forEach(pid=>{
+    const p=src.people.find(x=>x.id===pid);
+    if(!p) return;
+    target.people.push({
+      id:'p'+uid(),
+      handle:p.handle,
+      realname:p.realname,
+      url:p.url,
+      followers:p.followers,
+      products:p.products?[...p.products]:(p.product?[p.product]:[]),
+      contact:p.contact,
+      phone:p.phone,
+      address:p.address,
+      type:p.type,
+      note:p.note,
+      // 아래는 새로 시작 (배송/게시 상태 초기화)
+      shipped:false,
+      postUrls:[]
+    });
+    count++;
+  });
+  save();renderSB();renderPage();cm();
+  toast(`${count}명 가져왔어요 (배송/게시 상태는 초기화됨)`);
+}
 function openAddW(){
-  const next=DB.weekly.length?Math.max(...DB.weekly.map(w=>w.round))+1:1;
+  const next=nextRoundForProject(_weeklyProject);
   om(`<div class="mh"><h3>새 주간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb"><div class="fg">
+    <div class="fr"><label>프로젝트</label><select id="f3" onchange="document.getElementById('f1').value=nextRoundForProject(this.value)">
+      <option value="기본"${_weeklyProject==='기본'?' selected':''}>기본 시딩</option>
+      <option value="백팩"${_weeklyProject==='백팩'?' selected':''}>🎒 백팩 시딩</option>
+    </select></div>
     <div class="fr"><label>차수</label><input id="f1" type="number" value="${next}" min="1"></div>
-    <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
-  </div></div>
+  </div>
+  <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
+  </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddW()">추가</button></div>`);
 }
-function saveAddW(){const round=parseInt(g('f1'))||1,date=g('f2'),id='w'+uid();DB.weekly.push({id,round,date,people:[]});save();selW(id);cm();toast(`${round}차 추가됨`);}
+function nextRoundForProject(project){
+  const same=DB.weekly.filter(w=>(w.project||'기본')===project);
+  return same.length?Math.max(...same.map(w=>w.round))+1:1;
+}
+function saveAddW(){const round=parseInt(g('f1'))||1,date=g('f2'),project=g('f3')||'기본',id='w'+uid();DB.weekly.push({id,round,date,project,people:[]});_weeklyProject=project;save();selW(id);cm();toast(`${project==='백팩'?'🎒 백팩 ':''}${round}차 추가됨`);}
 
 // 인원 추가
 function openAddP(wid){
@@ -2127,10 +2286,10 @@ function openMoveP(wid){
       +'<div style="color:#888">'+((p.products||[]).join(', ')||'-')+'</div>'
       +'</div>';
   }).join('');
-  var _moveOpts=targets.length?targets.map(function(t){return '<option value="'+t.id+'">'+t.round+'차 ('+t.date+')</option>';}).join(''):'';
+  var _moveOpts=targets.length?targets.map(function(t){return '<option value="'+t.id+'">'+(t.project==='백팩'?'🎒 백팩 ':'기본 ')+getMonthRound(t.id).replace('🎒 ','')+' ('+t.date+')</option>';}).join(''):'';
   om('<div class="mh"><h3>차수 이동</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
-    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요.</p>'
+    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요. (기본 시딩 ↔ 백팩 시딩 사이에도 이동 가능해요)</p>'
     +'<div style="border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;margin-bottom:14px">'
     +'<div style="background:#f9f9f9;padding:6px 12px;font-size:11px;font-weight:700;color:#888;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px">'
     +'<div><input type="checkbox" id="move-chk-all" onchange="toggleAllMove(this)"></div>'
@@ -2143,8 +2302,10 @@ function openMoveP(wid){
     +'<option value="__new__">+ 새 차수 만들기</option>'
     +'</select></div>'
     +'<div class="fr" id="move-new-date" style="display:none">'
-    +'<label>새 차수 날짜</label>'
-    +'<input type="date" id="move-new-date-input" value="'+today()+'">'
+    +'<div class="fg">'
+    +'<div class="fr"><label>새 차수 프로젝트</label><select id="move-new-project"><option value="기본">기본 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>'
+    +'<div class="fr"><label>새 차수 날짜</label><input type="date" id="move-new-date-input" value="'+today()+'"></div>'
+    +'</div>'
     +'</div>'
     +'</div>'
     +'<div class="mf">'
@@ -2167,9 +2328,11 @@ function executeMoveP(wid){
   let target;
   if(targetId==='__new__'){
     const newDate=document.getElementById('move-new-date-input').value;
-    const maxRound=Math.max(0,...DB.weekly.map(x=>x.round));
-    target={id:'w'+uid(),round:maxRound+1,date:newDate,people:[]};
+    const newProject=document.getElementById('move-new-project').value||'기본';
+    const newRound=nextRoundForProject(newProject);
+    target={id:'w'+uid(),round:newRound,date:newDate,project:newProject,people:[]};
     DB.weekly.push(target);
+    _weeklyProject=newProject;
   } else {
     target=DB.weekly.find(x=>x.id===targetId);
   }
@@ -2177,7 +2340,7 @@ function executeMoveP(wid){
   people.forEach(p=>target.people.push({...p,id:'p'+uid()}));
   w.people=w.people.filter(p=>!selected.includes(p.id));
   save();renderSB();renderPage();cm();
-  toast(`${selected.length}명 → ${target.round}차로 이동됨`);
+  toast(`${selected.length}명 → ${(target.project==='백팩'?'🎒 백팩 ':'')}${target.round}차로 이동됨`);
 }
 function addProdField(){const list=document.getElementById('prod-list');const idx=list.querySelectorAll('.prod-row').length+1;const row=document.createElement('div');row.className='fg prod-row';row.innerHTML=`<div class="fr" style="flex:1"><label>제품 ${idx}</label><input class="prod-input" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button>`;list.appendChild(row);}
 function getProducts(){return [...document.querySelectorAll('.prod-input')].map(x=>x.value.trim()).filter(Boolean);}
@@ -2582,11 +2745,12 @@ function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.fi
 // 월 기준 상대 차수 계산 (표시용)
 function getMonthRound(wid){
   const w=DB.weekly.find(x=>x.id===wid);if(!w)return w?.round;
+  const proj=w.project||'기본';
   const ym=w.date.slice(0,7);
-  const sameMonth=[...DB.weekly].filter(x=>x.date.slice(0,7)===ym).sort((a,b)=>a.round-b.round);
+  const sameMonth=[...DB.weekly].filter(x=>x.date.slice(0,7)===ym&&(x.project||'기본')===proj).sort((a,b)=>a.round-b.round);
   const idx=sameMonth.findIndex(x=>x.id===wid);
   const mon=parseInt(ym.slice(5))+'월';
-  return `${mon} ${idx+1}차`;
+  return `${proj==='백팩'?'🎒 ':''}${mon} ${idx+1}차`;
 }
 
 function toggleShipped(wid,pid,checked){

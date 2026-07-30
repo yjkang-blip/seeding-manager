@@ -524,9 +524,9 @@ function renderSB(){
     el.innerHTML=h;return;
   }
   if(t==='weekly'){
-    // 프로젝트 전환 탭 (기본 시딩 / 백팩 시딩)
+    // 프로젝트 전환 탭 (탱글 시딩 / 백팩 시딩)
     h+=`<div style="display:flex;gap:4px;padding:0 4px 10px">
-      <button onclick="setWeeklyProject('기본')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='기본'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">기본 시딩</button>
+      <button onclick="setWeeklyProject('기본')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='기본'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">탱글 시딩</button>
       <button onclick="setWeeklyProject('백팩')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='백팩'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">🎒 백팩 시딩</button>
     </div>
     <div style="padding:0 4px 10px">
@@ -1145,7 +1145,7 @@ function pgDash(){
   document.getElementById('nav-act').innerHTML=`<button class="btn" style="font-size:11px;color:#999" onclick="resetData()" title="데이터 초기화 (주의: 모든 데이터가 기본값으로 리셋됩니다)">🔄 데이터 초기화</button>`;
   document.getElementById('page').innerHTML=`
   <div class="stats">
-    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">기본 ${basicTotal}명 · 🎒 백팩 ${backpackTotal}명</div></div>
+    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">탱글 ${basicTotal}명 · 🎒 백팩 ${backpackTotal}명</div></div>
     <div class="sc"><div class="sc-l">총 팔로워 도달</div><div class="sc-n">${Math.round(totalF/10000)}<small>만</small></div></div>
     <div class="sc"><div class="sc-l">캠페인 유형</div><div class="sc-n">${new Set(DB.campaigns.map(c=>c.type)).size}<small>종</small></div><div class="sc-s">릴스 · 2차 활용</div></div>
     <div class="sc"><div class="sc-l">캠페인 비용</div><div class="sc-n">${totalFee}<small>만원</small></div></div>
@@ -1209,7 +1209,7 @@ function pgWeekly(){
     document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddW()">＋ 새 ${_weeklyProject==='백팩'?'🎒 백팩 ':''}주간 리스트</button>`;
     document.getElementById('page').innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">${_weeklyProject==='백팩'?'🎒 백팩 시딩':'기본 시딩'}</h2>
+      <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">${_weeklyProject==='백팩'?'🎒 백팩 시딩':'탱글 시딩'}</h2>
     </div>
     <div class="stats">
       <div class="sc"><div class="sc-l">총 차수</div><div class="sc-n">${projWeekly.length}<small>차</small></div></div>
@@ -2096,8 +2096,8 @@ function openQuickSend(wid,pid){
   const otherProj=curProj==='백팩'?'기본':'백팩';
   om(`<div class="mh"><h3>📤 ${e(p.handle)} 다른 시딩으로 복사</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
-    <p style="font-size:12px;color:#888;margin-bottom:14px">원본(${curProj==='백팩'?'🎒 백팩':'기본'} 시딩)은 그대로 두고, 복사본이 새로 만들어져요. 배송완료/게시물 링크는 새로 초기화돼요.</p>
-    <button class="btn pri" style="width:100%;margin-bottom:8px;padding:12px;font-size:14px" data-wid="${wid}" data-pid="${pid}" data-proj="${otherProj}" onclick="quickSendExecute(this.dataset.wid,this.dataset.pid,this.dataset.proj)">${otherProj==='백팩'?'🎒 백팩 시딩':'기본 시딩'} 최신 차수로 복사</button>
+    <p style="font-size:12px;color:#888;margin-bottom:14px">원본(${curProj==='백팩'?'🎒 백팩':'탱글'} 시딩)은 그대로 두고, 복사본이 새로 만들어져요. 배송완료/게시물 링크는 새로 초기화돼요.</p>
+    <button class="btn pri" style="width:100%;margin-bottom:8px;padding:12px;font-size:14px" data-wid="${wid}" data-pid="${pid}" data-proj="${otherProj}" onclick="quickSendExecute(this.dataset.wid,this.dataset.pid,this.dataset.proj)">${otherProj==='백팩'?'🎒 백팩 시딩':'탱글 시딩'} 최신 차수로 복사</button>
     <button class="btn" style="width:100%" data-wid="${wid}" data-pid="${pid}" onclick="cm();openSendToRound(this.dataset.wid,this.dataset.pid)">다른 차수 직접 선택...</button>
   </div>`);
 }
@@ -2112,7 +2112,7 @@ function quickSendExecute(wid,pid,targetProject){
   }
   target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[]});
   save();cm();
-  toast(`${p.handle} → ${targetProject==='백팩'?'🎒 백팩':'기본'} 시딩으로 복사됨`);
+  toast(`${p.handle} → ${targetProject==='백팩'?'🎒 백팩':'탱글'} 시딩으로 복사됨`);
   renderSB();renderPage();
 }
 function openSendToRound(wid,pid){
@@ -2126,7 +2126,7 @@ function openSendToRound(wid,pid){
       <select id="qsTarget" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit">${optHtml}<option value="__new__">+ 새 차수 만들기</option></select>
     </div>
     <div class="fg" id="qsNewWrap" style="display:none">
-      <div class="fr"><label>프로젝트</label><select id="qsNewProject"><option value="기본">기본 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>
+      <div class="fr"><label>프로젝트</label><select id="qsNewProject"><option value="기본">탱글 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>
       <div class="fr"><label>날짜</label><input id="qsNewDate" type="date" value="${today()}"></div>
     </div>
   </div>
@@ -2150,7 +2150,7 @@ function executeSendToRound(wid,pid){
   }
   target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[]});
   save();cm();
-  toast(`${p.handle} → ${(target.project==='백팩'?'🎒 백팩':'기본')} ${target.round}차로 복사됨`);
+  toast(`${p.handle} → ${(target.project==='백팩'?'🎒 백팩':'탱글')} ${target.round}차로 복사됨`);
   renderSB();renderPage();
 }
 function openImportP(targetWid){
@@ -2230,7 +2230,7 @@ function openAddW(){
   om(`<div class="mh"><h3>새 주간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb"><div class="fg">
     <div class="fr"><label>프로젝트</label><select id="f3" onchange="document.getElementById('f1').value=nextRoundForProject(this.value)">
-      <option value="기본"${_weeklyProject==='기본'?' selected':''}>기본 시딩</option>
+      <option value="기본"${_weeklyProject==='기본'?' selected':''}>탱글 시딩</option>
       <option value="백팩"${_weeklyProject==='백팩'?' selected':''}>🎒 백팩 시딩</option>
     </select></div>
     <div class="fr"><label>차수</label><input id="f1" type="number" value="${next}" min="1"></div>
@@ -2289,7 +2289,7 @@ function openMoveP(wid){
   var _moveOpts=targets.length?targets.map(function(t){return '<option value="'+t.id+'">'+(t.project==='백팩'?'🎒 백팩 ':'기본 ')+getMonthRound(t.id).replace('🎒 ','')+' ('+t.date+')</option>';}).join(''):'';
   om('<div class="mh"><h3>차수 이동</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
-    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요. (기본 시딩 ↔ 백팩 시딩 사이에도 이동 가능해요)</p>'
+    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요. (탱글 시딩 ↔ 백팩 시딩 사이에도 이동 가능해요)</p>'
     +'<div style="border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;margin-bottom:14px">'
     +'<div style="background:#f9f9f9;padding:6px 12px;font-size:11px;font-weight:700;color:#888;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px">'
     +'<div><input type="checkbox" id="move-chk-all" onchange="toggleAllMove(this)"></div>'
@@ -2303,7 +2303,7 @@ function openMoveP(wid){
     +'</select></div>'
     +'<div class="fr" id="move-new-date" style="display:none">'
     +'<div class="fg">'
-    +'<div class="fr"><label>새 차수 프로젝트</label><select id="move-new-project"><option value="기본">기본 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>'
+    +'<div class="fr"><label>새 차수 프로젝트</label><select id="move-new-project"><option value="기본">탱글 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>'
     +'<div class="fr"><label>새 차수 날짜</label><input type="date" id="move-new-date-input" value="'+today()+'"></div>'
     +'</div>'
     +'</div>'

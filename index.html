@@ -1865,21 +1865,22 @@ function renderGalleryResults(){
     }).filter(function(g){return g.items.length>0;});
   }
 
-  if(_gallerySort==='recent'){
-    const allPosted=[];
-    filteredGroups.forEach(function(g){
-      g.items.forEach(function(x){ if(x.posted) allPosted.push(x); });
+  // 캡처된 것만 최근 캡처순으로 정렬, 캡처 안 된 건 원래 순서 그대로 뒤에 유지 (주차별 구조는 그대로)
+  function hasShot(x){
+    return x.urls.some(function(u){ const s=getScreenshot(u); return s&&s.capturedAt; });
+  }
+  function latestShotDate(x){
+    let latest='';
+    x.urls.forEach(function(u){
+      const shot=getScreenshot(u);
+      if(shot&&shot.capturedAt&&shot.capturedAt>latest) latest=shot.capturedAt;
     });
-    function recencyKey(x){
-      let best='';
-      x.urls.forEach(function(u){
-        const shot=getScreenshot(u);
-        if(shot&&shot.capturedAt&&shot.capturedAt>best) best=shot.capturedAt;
-      });
-      return best;
-    }
-    allPosted.sort(function(a,b){ return recencyKey(b).localeCompare(recencyKey(a)); });
-    filteredGroups=allPosted.length?[{key:'recent-all',label:'🕐 최신 게시순 (캡처된 날짜 기준, 아직 캡처 안 된 건 맨 아래)',dateLabel:'',items:allPosted}]:[];
+    return latest;
+  }
+  function sortByRecent(items){
+    const captured=items.filter(hasShot).sort(function(a,b){ return latestShotDate(b).localeCompare(latestShotDate(a)); });
+    const uncaptured=items.filter(function(x){return !hasShot(x);});
+    return captured.concat(uncaptured);
   }
 
   if(_galleryExpanded===null){
@@ -1897,7 +1898,7 @@ function renderGalleryResults(){
     const postedCnt=g.items.filter(function(x){return x.posted;}).length;
     const total=g.items.length;
     const allDone=postedCnt===total;
-    const open=(searching||_gallerySort==='recent')?true:!!_galleryExpanded[g.key];
+    const open=searching?true:!!_galleryExpanded[g.key];
     return `
     <div class="tw" style="margin-bottom:14px">
       <div class="tw-h" style="align-items:center;cursor:pointer" onclick="toggleWeekGallery('${g.key}')">
@@ -1937,7 +1938,7 @@ function renderGalleryResults(){
       </div>`:'')}
       ${!open?'':(g.items.some(function(x){return x.posted;})?`
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;padding:4px 16px 16px">
-        ${g.items.filter(function(x){return x.posted;}).flatMap(function(x){
+        ${(_gallerySort==='recent'?sortByRecent(g.items.filter(function(x){return x.posted;})):g.items.filter(function(x){return x.posted;})).flatMap(function(x){
           return x.urls.map(function(url,idx){
             const eng=getEngagement(url);
             const shot=getScreenshot(url);

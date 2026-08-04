@@ -1617,6 +1617,16 @@ function getScreenshot(postUrl){
   const key=normPostUrl(postUrl);
   return (DB.screenshots||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
 }
+function updateCaptureDate(postUrl,newDate){
+  if(!newDate) return;
+  const key=normPostUrl(postUrl);
+  const rec=(DB.screenshots||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
+  if(!rec) return;
+  rec.capturedAt=newDate;
+  save();
+  toast('캡처 날짜 수정됨');
+  pgExposureGallery();
+}
 function manualUploadScreenshot(evt,postUrl){
   const file=evt.target.files&&evt.target.files[0];
   if(!file) return;
@@ -1719,6 +1729,8 @@ function personCategories(handle){
 let _galleryExpanded=null; // wid -> bool, lazily initialized
 let _galleryCat='전체'; // 갤러리 카테고리 필터
 let _gallerySearch=''; // 갤러리 활동명 검색어
+let _gallerySort='week'; // 'week' 주차별 | 'recent' 최신 게시순
+function setGallerySort(v){ _gallerySort=v; pgExposureGallery(); }
 function toggleWeekGallery(wid){
   _galleryExpanded[wid]=!_galleryExpanded[wid];
   pgExposureGallery();
@@ -1726,9 +1738,7 @@ function toggleWeekGallery(wid){
 function setGalleryCat(cat){ _galleryCat=cat; pgExposureGallery(); }
 function setGallerySearch(v){
   _gallerySearch=v;
-  pgExposureGallery();
-  const el=document.getElementById('gallerySearchInput');
-  if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); }
+  renderGalleryResults(); // 검색창 자체는 다시 그리지 않고 결과만 갱신 (한글 입력 조합 끊김 방지)
 }
 function toggleFavorite(wid,pid){
   const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);
@@ -1737,6 +1747,8 @@ function toggleFavorite(wid,pid){
   save();
   if(cur.tab==='weekly') renderPage(); else pgExposureGallery();
 }
+let _galleryBaseGroups=null; // 카테고리 기준으로 필터된 기본 그룹 (검색/정렬 전) 캐시
+
 function pgExposureGallery(){
   const pg=document.getElementById('page');
   const catList=['전체','릴스캠페인','2차활용','zvzo','브랜더진','⭐즐겨찾기'];
@@ -1813,6 +1825,37 @@ function pgExposureGallery(){
   let totalPosted=0,totalPending=0;
   groups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
 
+  _galleryBaseGroups=groups; // 검색어 입력 시엔 이걸 재사용해서 전체 재렌더링(=IME 조합 끊김) 피함
+
+  pg.innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <button class="btn" onclick="cur.expView='list';renderPage()">← 노출 보고</button>
+    <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">📸 게시물 갤러리</h2>
+    <button class="btn" onclick="openBulkPostUrl()">📋 링크 일괄 등록</button>
+    <span style="font-size:12px;color:#aaa">게시완료 ${totalPosted} · 게시대기 ${totalPending}</span>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <input type="text" id="gallerySearchInput" value="${e(_gallerySearch)}" oninput="setGallerySearch(this.value)" placeholder="🔍 활동명으로 검색" style="flex:1;padding:9px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit">
+    <div style="display:flex;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;flex-shrink:0">
+      <button onclick="setGallerySort('week')" style="padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_gallerySort==='week'?'#1D4E3A':'#fff'};color:${_gallerySort==='week'?'#fff':'#555'}">🗓 주차순</button>
+      <button onclick="setGallerySort('recent')" style="padding:0 12px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_gallerySort==='recent'?'#1D4E3A':'#fff'};color:${_gallerySort==='recent'?'#fff':'#555'}">🕐 최신 게시순</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+    ${catList.map(function(cat){
+      const on=_galleryCat===cat;
+      return `<button onclick="setGalleryCat('${cat}')" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
+    }).join('')}
+  </div>
+  <div id="galleryResultsWrap"></div>`;
+  renderGalleryResults();
+}
+
+function renderGalleryResults(){
+  const wrap=document.getElementById('galleryResultsWrap');
+  if(!wrap) return;
+  const groups=_galleryBaseGroups||[];
+
   const searching=_gallerySearch.trim().length>0;
   let filteredGroups=groups;
   if(searching){
@@ -1820,6 +1863,23 @@ function pgExposureGallery(){
     filteredGroups=groups.map(function(g){
       return {key:g.key,label:g.label,dateLabel:g.dateLabel,items:g.items.filter(function(x){return normH(x.handle).includes(key);})};
     }).filter(function(g){return g.items.length>0;});
+  }
+
+  if(_gallerySort==='recent'){
+    const allPosted=[];
+    filteredGroups.forEach(function(g){
+      g.items.forEach(function(x){ if(x.posted) allPosted.push(x); });
+    });
+    function recencyKey(x){
+      let best='';
+      x.urls.forEach(function(u){
+        const shot=getScreenshot(u);
+        if(shot&&shot.capturedAt&&shot.capturedAt>best) best=shot.capturedAt;
+      });
+      return best;
+    }
+    allPosted.sort(function(a,b){ return recencyKey(b).localeCompare(recencyKey(a)); });
+    filteredGroups=allPosted.length?[{key:'recent-all',label:'🕐 최신 게시순 (캡처된 날짜 기준, 아직 캡처 안 된 건 맨 아래)',dateLabel:'',items:allPosted}]:[];
   }
 
   if(_galleryExpanded===null){
@@ -1831,28 +1891,13 @@ function pgExposureGallery(){
   }
   groups.forEach(function(g){ if(!(g.key in _galleryExpanded)) _galleryExpanded[g.key]=g.items.some(function(x){return !x.posted;}); });
 
-  pg.innerHTML=`
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-    <button class="btn" onclick="cur.expView='list';renderPage()">← 노출 보고</button>
-    <h2 style="font-size:16px;font-weight:700;color:#1D4E3A;flex:1">📸 게시물 갤러리</h2>
-    <button class="btn" onclick="openBulkPostUrl()">📋 링크 일괄 등록</button>
-    <span style="font-size:12px;color:#aaa">게시완료 ${totalPosted} · 게시대기 ${totalPending}</span>
-  </div>
-  <div style="margin-bottom:12px">
-    <input type="text" id="gallerySearchInput" value="${e(_gallerySearch)}" oninput="setGallerySearch(this.value)" placeholder="🔍 활동명으로 검색" style="width:100%;padding:9px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit">
-  </div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
-    ${catList.map(function(cat){
-      const on=_galleryCat===cat;
-      return `<button onclick="setGalleryCat('${cat}')" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
-    }).join('')}
-  </div>
+  wrap.innerHTML=`
   ${filteredGroups.length===0?`<div class="nodata" style="margin-top:60px">${searching?`"${e(_gallerySearch)}" 검색 결과 없음`:(_galleryCat==='⭐즐겨찾기'?'⭐ 표시한 사람이 아직 없어요. 주간 리스트에서 별표를 눌러보세요':'배송완료 처리된 인원, 또는 캠페인/협업 인원이 여기 자동 표시돼요')}</div>`:
   filteredGroups.map(function(g){
     const postedCnt=g.items.filter(function(x){return x.posted;}).length;
     const total=g.items.length;
     const allDone=postedCnt===total;
-    const open=searching?true:!!_galleryExpanded[g.key];
+    const open=(searching||_gallerySort==='recent')?true:!!_galleryExpanded[g.key];
     return `
     <div class="tw" style="margin-bottom:14px">
       <div class="tw-h" style="align-items:center;cursor:pointer" onclick="toggleWeekGallery('${g.key}')">
@@ -1864,7 +1909,7 @@ function pgExposureGallery(){
           const rowId='pend-row-'+g.key.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+idx;
           return x.posted
             ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#D1FAE5;color:#065F46;font-weight:600">✅ ${e(x.handle)}${x.urls.length>1?' ×'+x.urls.length:''}</span>`
-            : `<span onclick="event.stopPropagation();_galleryExpanded['${g.key}']=true;pgExposureGallery();setTimeout(()=>document.getElementById('${rowId}')?.scrollIntoView({behavior:'smooth',block:'center'}),50)" style="cursor:pointer;font-size:11px;padding:4px 10px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:600">⏳ ${e(x.handle)}</span>`;
+            : `<span onclick="event.stopPropagation();_galleryExpanded['${g.key}']=true;renderGalleryResults();setTimeout(()=>document.getElementById('${rowId}')?.scrollIntoView({behavior:'smooth',block:'center'}),50)" style="cursor:pointer;font-size:11px;padding:4px 10px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:600">⏳ ${e(x.handle)}</span>`;
         }).join('')}
       </div>
       ${!open?'':(g.items.some(function(x){return !x.posted;})?`
@@ -1883,7 +1928,6 @@ function pgExposureGallery(){
                 <div style="display:flex;gap:6px">
                   <textarea id="${inputId}" rows="1" placeholder="https://www.instagram.com/p/... (줄바꿈으로 여러개)" style="flex:1;padding:5px 8px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical"></textarea>
                   <button class="btn sm pri" onclick='quickSetPostUrlGeneric(${JSON.stringify(x.src)},"${inputId}")'>등록</button>
-                  <button class="btn sm" onclick='deleteFromGallery(${JSON.stringify(x.src)})' title="갤러리에서만 지우기 (주간 리스트는 유지)">🗑</button>
                 </div>
               </td>
             </tr>`;
@@ -1908,8 +1952,8 @@ function pgExposureGallery(){
               const rpDiff=(last.reposts||0)-(first.reposts||0);
               trendHtml=`❤️ ${last.likes.toLocaleString()}${h.length>1?`<span style="color:${likeDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${likeDiff>=0?'+':''}${likeDiff})</span>`:''}
                 &nbsp;·&nbsp; 💬 ${last.comments.toLocaleString()}${h.length>1?`<span style="color:${cmtDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${cmtDiff>=0?'+':''}${cmtDiff})</span>`:''}
-                ${(last.shares||last.reposts||shrDiff||rpDiff)?`<br>🔁 ${(last.shares||0).toLocaleString()}${h.length>1?`<span style="color:${shrDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${shrDiff>=0?'+':''}${shrDiff})</span>`:''}
-                &nbsp;·&nbsp; ♻️ ${(last.reposts||0).toLocaleString()}${h.length>1?`<span style="color:${rpDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${rpDiff>=0?'+':''}${rpDiff})</span>`:''}`:''}
+                ${(last.shares||last.reposts||shrDiff||rpDiff)?`<br>♻️ ${(last.reposts||0).toLocaleString()}${h.length>1?`<span style="color:${rpDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${rpDiff>=0?'+':''}${rpDiff})</span>`:''}
+                &nbsp;·&nbsp; 🔁 ${(last.shares||0).toLocaleString()}${h.length>1?`<span style="color:${shrDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${shrDiff>=0?'+':''}${shrDiff})</span>`:''}`:''}
                 <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
             }
             const uid_=(x.src.wid||x.src.cid||x.src.id||'x')+'-'+(x.src.pid||'')+'-'+idx;
@@ -1922,8 +1966,11 @@ function pgExposureGallery(){
               ${embedHtml}
               <div style="padding:12px 14px;border-top:1px solid #f0f0f0">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                  <div style="font-weight:700;font-size:13px">${e(x.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
+                  <div style="font-weight:700;font-size:13px">${e(x.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}</div>
                   <button onclick='deleteFromGallery(${JSON.stringify(x.src)})' style="background:none;border:none;cursor:pointer;color:#ccc;font-size:12px;padding:0 0 0 6px" title="갤러리에서만 지우기 (주간 리스트는 유지)">🗑</button>
+                </div>
+                <div style="margin:2px 0 6px;font-size:10px;color:#8ab;display:flex;align-items:center;gap:4px">
+                  ${shot?`🔒 영구보관 · 캡처일 <input type="date" value="${shot.capturedAt||''}" onchange='updateCaptureDate(${JSON.stringify(url)},this.value)' style="border:1px solid #e0e0e0;border-radius:4px;padding:1px 4px;font-size:10px;font-family:inherit;color:#557">`:`<span style="color:#ccc">캡처 대기중</span>`}
                 </div>
                 ${!shot?`<div style="margin:4px 0 8px">
                   <input type="file" accept="image/*" id="shot-file-${uid_}" style="display:none" onchange='manualUploadScreenshot(event,"${e(url).replace(/"/g,'&quot;')}")'>
@@ -1936,8 +1983,8 @@ function pgExposureGallery(){
                   <input type="number" id="eng-cmt-${uid_}" placeholder="💬 댓글" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
                 </div>
                 <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
-                  <input type="number" id="eng-shr-${uid_}" placeholder="🔁 공유" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
                   <input type="number" id="eng-rp-${uid_}" placeholder="♻️ 리포스트" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+                  <input type="number" id="eng-shr-${uid_}" placeholder="🔁 공유" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
                   <button class="btn sm pri" data-url="${e(url)}" data-handle="${e(x.handle)}" data-uid="${uid_}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.uid)">기록</button>
                 </div>
               </div>
@@ -1949,6 +1996,7 @@ function pgExposureGallery(){
   }).join('')}`;
   ensureIgEmbedScript(function(){ if(window.instgrm) window.instgrm.Embeds.process(); });
 }
+
 
 function quickSetPostUrlGeneric(src,inputId){
   const input=document.getElementById(inputId);

@@ -1718,11 +1718,18 @@ function personCategories(handle){
 }
 let _galleryExpanded=null; // wid -> bool, lazily initialized
 let _galleryCat='전체'; // 갤러리 카테고리 필터
+let _gallerySearch=''; // 갤러리 활동명 검색어
 function toggleWeekGallery(wid){
   _galleryExpanded[wid]=!_galleryExpanded[wid];
   pgExposureGallery();
 }
 function setGalleryCat(cat){ _galleryCat=cat; pgExposureGallery(); }
+function setGallerySearch(v){
+  _gallerySearch=v;
+  pgExposureGallery();
+  const el=document.getElementById('gallerySearchInput');
+  if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); }
+}
 function toggleFavorite(wid,pid){
   const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);
   if(!p) return;
@@ -1806,6 +1813,15 @@ function pgExposureGallery(){
   let totalPosted=0,totalPending=0;
   groups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
 
+  const searching=_gallerySearch.trim().length>0;
+  let filteredGroups=groups;
+  if(searching){
+    const key=normH(_gallerySearch);
+    filteredGroups=groups.map(function(g){
+      return {key:g.key,label:g.label,dateLabel:g.dateLabel,items:g.items.filter(function(x){return normH(x.handle).includes(key);})};
+    }).filter(function(g){return g.items.length>0;});
+  }
+
   if(_galleryExpanded===null){
     _galleryExpanded={};
     groups.forEach(function(g,i){
@@ -1822,18 +1838,21 @@ function pgExposureGallery(){
     <button class="btn" onclick="openBulkPostUrl()">📋 링크 일괄 등록</button>
     <span style="font-size:12px;color:#aaa">게시완료 ${totalPosted} · 게시대기 ${totalPending}</span>
   </div>
+  <div style="margin-bottom:12px">
+    <input type="text" id="gallerySearchInput" value="${e(_gallerySearch)}" oninput="setGallerySearch(this.value)" placeholder="🔍 활동명으로 검색" style="width:100%;padding:9px 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit">
+  </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
     ${catList.map(function(cat){
       const on=_galleryCat===cat;
       return `<button onclick="setGalleryCat('${cat}')" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
     }).join('')}
   </div>
-  ${groups.length===0?`<div class="nodata" style="margin-top:60px">${_galleryCat==='⭐즐겨찾기'?'⭐ 표시한 사람이 아직 없어요. 주간 리스트에서 별표를 눌러보세요':'배송완료 처리된 인원, 또는 캠페인/협업 인원이 여기 자동 표시돼요'}</div>`:
-  groups.map(function(g){
+  ${filteredGroups.length===0?`<div class="nodata" style="margin-top:60px">${searching?`"${e(_gallerySearch)}" 검색 결과 없음`:(_galleryCat==='⭐즐겨찾기'?'⭐ 표시한 사람이 아직 없어요. 주간 리스트에서 별표를 눌러보세요':'배송완료 처리된 인원, 또는 캠페인/협업 인원이 여기 자동 표시돼요')}</div>`:
+  filteredGroups.map(function(g){
     const postedCnt=g.items.filter(function(x){return x.posted;}).length;
     const total=g.items.length;
     const allDone=postedCnt===total;
-    const open=!!_galleryExpanded[g.key];
+    const open=searching?true:!!_galleryExpanded[g.key];
     return `
     <div class="tw" style="margin-bottom:14px">
       <div class="tw-h" style="align-items:center;cursor:pointer" onclick="toggleWeekGallery('${g.key}')">

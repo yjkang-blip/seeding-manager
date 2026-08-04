@@ -1617,6 +1617,38 @@ function getScreenshot(postUrl){
   const key=normPostUrl(postUrl);
   return (DB.screenshots||[]).find(function(x){return normPostUrl(x.postUrl)===key;});
 }
+function manualUploadScreenshot(evt,postUrl){
+  const file=evt.target.files&&evt.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ toast('이미지 파일만 올릴 수 있어요'); return; }
+  toast('업로드 중...');
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      // 최대 가로 600px로 축소 + JPEG 압축해서 용량을 작게 유지
+      const maxW=600;
+      const scale=Math.min(1,maxW/img.width);
+      const canvas=document.createElement('canvas');
+      canvas.width=img.width*scale;
+      canvas.height=img.height*scale;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.7);
+      if(!DB.screenshots) DB.screenshots=[];
+      const key=normPostUrl(postUrl);
+      let rec=DB.screenshots.find(function(x){return normPostUrl(x.postUrl)===key;});
+      if(!rec){ rec={postUrl:postUrl,url:'',capturedAt:''}; DB.screenshots.push(rec); }
+      rec.url=dataUrl;
+      rec.capturedAt=today();
+      save();
+      toast('캡처 저장됨 ✓');
+      pgExposureGallery();
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 function getPostUrls(p){
   const arr=Array.isArray(p.postUrls)?p.postUrls.filter(Boolean).slice():[];
   if(p.postUrl && !arr.includes(p.postUrl)) arr.unshift(p.postUrl);
@@ -1853,8 +1885,12 @@ function pgExposureGallery(){
             if(last){
               const likeDiff=last.likes-first.likes;
               const cmtDiff=last.comments-first.comments;
+              const shrDiff=(last.shares||0)-(first.shares||0);
+              const rpDiff=(last.reposts||0)-(first.reposts||0);
               trendHtml=`❤️ ${last.likes.toLocaleString()}${h.length>1?`<span style="color:${likeDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${likeDiff>=0?'+':''}${likeDiff})</span>`:''}
                 &nbsp;·&nbsp; 💬 ${last.comments.toLocaleString()}${h.length>1?`<span style="color:${cmtDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${cmtDiff>=0?'+':''}${cmtDiff})</span>`:''}
+                ${(last.shares||last.reposts||shrDiff||rpDiff)?`<br>🔁 ${(last.shares||0).toLocaleString()}${h.length>1?`<span style="color:${shrDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${shrDiff>=0?'+':''}${shrDiff})</span>`:''}
+                &nbsp;·&nbsp; ♻️ ${(last.reposts||0).toLocaleString()}${h.length>1?`<span style="color:${rpDiff>=0?'#065F46':'#991B1B'};font-size:11px"> (${rpDiff>=0?'+':''}${rpDiff})</span>`:''}`:''}
                 <div style="color:#bbb;font-size:10px;margin-top:2px">최근 기록 ${last.date}</div>`;
             }
             const uid_=(x.src.wid||x.src.cid||x.src.id||'x')+'-'+(x.src.pid||'')+'-'+idx;
@@ -1870,11 +1906,19 @@ function pgExposureGallery(){
                   <div style="font-weight:700;font-size:13px">${e(x.handle)}${x.urls.length>1?` <span style="font-weight:400;color:#aaa;font-size:11px">(${idx+1}/${x.urls.length})</span>`:''} ${isYoutubeUrl(url)?'▶️':'📷'}${shot?' <span style="font-weight:400;color:#8ab;font-size:10px" title="'+shot.capturedAt+' 캡처됨, 게시물이 지워져도 유지됩니다">🔒 영구보관</span>':' <span style="font-weight:400;color:#ccc;font-size:10px">캡처 대기중</span>'}</div>
                   <button onclick='deleteFromGallery(${JSON.stringify(x.src)})' style="background:none;border:none;cursor:pointer;color:#ccc;font-size:12px;padding:0 0 0 6px" title="갤러리에서만 지우기 (주간 리스트는 유지)">🗑</button>
                 </div>
+                ${!shot?`<div style="margin:4px 0 8px">
+                  <input type="file" accept="image/*" id="shot-file-${uid_}" style="display:none" onchange='manualUploadScreenshot(event,"${e(url).replace(/"/g,'&quot;')}")'>
+                  <button onclick="document.getElementById('shot-file-${uid_}').click()" style="font-size:11px;padding:4px 10px;border:1px dashed #ccc;border-radius:6px;background:none;color:#888;cursor:pointer;font-family:inherit">📸 직접 캡처 업로드 (영구보관)</button>
+                </div>`:''}
                 <div style="font-size:11px;color:#888;margin:2px 0 8px">${e(x.product)}</div>
                 <div style="font-size:12px;margin-bottom:10px">${trendHtml}</div>
-                <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
+                <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px;margin-bottom:6px">
                   <input type="number" id="eng-like-${uid_}" placeholder="❤️ 좋아요" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
                   <input type="number" id="eng-cmt-${uid_}" placeholder="💬 댓글" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;background:#f7fdfa;border-radius:8px;padding:8px">
+                  <input type="number" id="eng-shr-${uid_}" placeholder="🔁 공유" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
+                  <input type="number" id="eng-rp-${uid_}" placeholder="♻️ 리포스트" style="width:0;flex:1;min-width:0;padding:5px 7px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit">
                   <button class="btn sm pri" data-url="${e(url)}" data-handle="${e(x.handle)}" data-uid="${uid_}" onclick="recordEngagement(this.dataset.url,this.dataset.handle,this.dataset.uid)">기록</button>
                 </div>
               </div>
@@ -1992,16 +2036,25 @@ function quickSetPostUrl(wid,pid){
 function recordEngagement(postUrl,handle,pid){
   const likeInput=document.getElementById('eng-like-'+pid);
   const cmtInput=document.getElementById('eng-cmt-'+pid);
+  const shrInput=document.getElementById('eng-shr-'+pid);
+  const rpInput=document.getElementById('eng-rp-'+pid);
   const likes=parseInt(likeInput.value);
   const comments=parseInt(cmtInput.value);
-  if(isNaN(likes)&&isNaN(comments)){ toast('숫자를 입력해주세요'); return; }
+  const shares=parseInt(shrInput.value);
+  const reposts=parseInt(rpInput.value);
+  if(isNaN(likes)&&isNaN(comments)&&isNaN(shares)&&isNaN(reposts)){ toast('숫자를 입력해주세요'); return; }
   if(!DB.engagement) DB.engagement=[];
   let rec=DB.engagement.find(function(x){ return normPostUrl(x.postUrl)===normPostUrl(postUrl); });
   if(!rec){ rec={id:'eng'+uid(),postUrl:postUrl,handle:handle,history:[]}; DB.engagement.push(rec); }
   const d=today();
   const todayEntry=rec.history.find(function(x){ return x.date===d; });
-  if(todayEntry){ todayEntry.likes=isNaN(likes)?todayEntry.likes:likes; todayEntry.comments=isNaN(comments)?todayEntry.comments:comments; }
-  else{ rec.history.push({date:d,likes:isNaN(likes)?0:likes,comments:isNaN(comments)?0:comments}); }
+  if(todayEntry){
+    todayEntry.likes=isNaN(likes)?todayEntry.likes:likes;
+    todayEntry.comments=isNaN(comments)?todayEntry.comments:comments;
+    todayEntry.shares=isNaN(shares)?(todayEntry.shares||0):shares;
+    todayEntry.reposts=isNaN(reposts)?(todayEntry.reposts||0):reposts;
+  }
+  else{ rec.history.push({date:d,likes:isNaN(likes)?0:likes,comments:isNaN(comments)?0:comments,shares:isNaN(shares)?0:shares,reposts:isNaN(reposts)?0:reposts}); }
   save();
   toast('반응수 기록됨');
   pgExposureGallery();

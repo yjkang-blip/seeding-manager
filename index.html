@@ -1470,8 +1470,8 @@ function pgCampaign(){
   <div class="tw">
     <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${c.name} ${c.round}차</h3><span class="sub">총 ${c.people.length}명${cur.campType==='릴스'?' · '+totalFee+'만원':''}</span></div>
     <div class="tsc"><table>
-      <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>발송일</th><th>업로드일</th><th>연락처</th><th>배송지</th>${cur.campType==='릴스'?'<th>비용</th>':''}<th>비고</th><th></th></tr></thead>
-      <tbody>${c.people.length===0?`<tr><td colspan="11" class="nodata">인원을 추가해주세요</td></tr>`:
+      <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>발송일</th><th>업로드일</th><th>연락처</th><th>배송지</th><th>단가</th><th>비고</th><th></th></tr></thead>
+      <tbody>${c.people.length===0?`<tr><td colspan="12" class="nodata">인원을 추가해주세요</td></tr>`:
         c.people.map((p,i)=>`<tr>
           <td style="color:#ccc">${i+1}</td>
           <td style="font-weight:700">${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):''}</td>
@@ -1482,7 +1482,7 @@ function pgCampaign(){
           <td style="font-size:11px;color:#3B82F6">${p.uploadDate||'-'}</td>
           <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
           <td style="font-size:11px;color:#666;max-width:150px">${p.address?e(p.address):'<span style="color:#bbb">미입력</span>'}</td>
-          ${cur.campType==='릴스'?`<td><span class="tag t-fe">${e(p.fee)||'-'}</span></td>`:''}
+          <td><span class="tag t-fe">${e(p.fee)||'-'}</span></td>
           <td style="font-size:11px;color:#888;max-width:120px">${e(p.note)||''}</td>
           <td style="white-space:nowrap">
             <button class="btn sm" onclick="openEditCP('${c.id}','${p.id}')">수정</button>
@@ -2683,7 +2683,7 @@ function pgCollabTab(brand, subHtml){
   if(!DB.collabs) DB.collabs=[];
   const items=DB.collabs.filter(x=>x.brand===brand).sort((a,b)=>a.startDate.localeCompare(b.startDate));
   document.getElementById('nav-act').innerHTML='<button class="btn pri" data-brand="'+brand+'" onclick="openAddCollab(this.dataset.brand)">＋ 협업 추가</button>';
-  const rows=items.length===0?'<tr><td colspan="8" class="nodata">협업을 추가해주세요</td></tr>':items.map(function(item){
+  const rows=items.length===0?'<tr><td colspan="9" class="nodata">협업을 추가해주세요</td></tr>':items.map(function(item){
     var s=new Date(item.startDate),en=new Date(item.endDate),td=new Date();
     var days=Math.round((en-s)/(1000*60*60*24))+1;
     var isActive=s<=td&&td<=en,isEnd=td>en;
@@ -2701,6 +2701,7 @@ function pgCollabTab(brand, subHtml){
       +'<td>'+item.startDate+'</td>'
       +'<td>'+item.endDate+'</td>'
       +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+statusBg+';color:'+statusColor+'">'+statusText+' '+days+'일</span></td>'
+      +'<td style="font-size:12px"><span class="tag t-fe">'+(e(item.fee)||'-')+'</span></td>'
       +'<td style="font-size:12px;color:#888">'+(item.note||'-')+'</td>'
       +'<td style="white-space:nowrap"><button class="btn sm" data-id="'+item.id+'" onclick="openEditCollab(this.dataset.id)">수정</button> <button class="btn sm dan" data-id="'+item.id+'" onclick="delCollab(this.dataset.id)">🗑</button></td>'
       +'</tr>';
@@ -2708,7 +2709,7 @@ function pgCollabTab(brand, subHtml){
   document.getElementById('page').innerHTML=subHtml
     +'<div class="tw"><div class="tw-h"><h3>'+(brand==='zvzo'?'🔗':'🏷')+' '+brand+' 협업 일정</h3><span class="sub">'+items.length+'건</span></div>'
     +'<div class="tsc"><table>'
-    +'<thead><tr><th>협업자/채널</th><th>유형</th><th>제품</th><th>시작일</th><th>종료일</th><th>상태</th><th>비고</th><th></th></tr></thead>'
+    +'<thead><tr><th>협업자/채널</th><th>유형</th><th>제품</th><th>시작일</th><th>종료일</th><th>상태</th><th>단가</th><th>비고</th><th></th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div></div>';
 }
 
@@ -2721,15 +2722,15 @@ function openAddCollab(brand){
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
     +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+d+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+d+'"></div></div>'
+    +'<div class="fg"><div class="fr"><label>단가</label><input id="cl9" placeholder="30만원"></div><div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div></div>'
     +'<div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(여러 개면 줄바꿈)</span></label><textarea id="cl8" rows="2" placeholder="https://www.instagram.com/p/..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>'
-    +'<div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div>'
     +'</div>'
     +'<div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-brand="'+brand+'" onclick="saveAddCollab(this.dataset.brand)">추가</button></div>');
 }
 
 function saveAddCollab(brand){
   var name=g('cl1').trim();if(!name){alert('협업자 이름 필수');return;}
-  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),postUrls:g('cl8').split('\n').map(s=>s.trim()).filter(Boolean),note:g('cl6').trim()};
+  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),fee:g('cl9').trim(),postUrls:g('cl8').split('\n').map(s=>s.trim()).filter(Boolean),note:g('cl6').trim()};
   if(!DB.collabs) DB.collabs=[];
   DB.collabs.push(item);
   save();cm();toast(name+' 협업 추가됨');
@@ -2747,8 +2748,8 @@ function openEditCollab(id){
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" value="'+e(item.name)+'"></div><div class="fr"><label>채널 아이디</label><input id="cl2" value="'+e(item.handle||'')+'"></div></div>'
     +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+item.startDate+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+item.endDate+'"></div></div>'
+    +'<div class="fg"><div class="fr"><label>단가</label><input id="cl9" value="'+e(item.fee||'')+'"></div><div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div></div>'
     +'<div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(여러 개면 줄바꿈)</span></label><textarea id="cl8" rows="2" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px">'+e(getPostUrls(item).join('\n'))+'</textarea></div>'
-    +'<div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div>'
     +'</div>'
     +'<div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" data-id="'+id+'" onclick="saveEditCollab(this.dataset.id)">저장</button></div>');
 }
@@ -2756,7 +2757,7 @@ function openEditCollab(id){
 function saveEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
   item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();item.contentType=g('cl7')||collabTypeOpts(item.brand)[0];
-  item.startDate=g('cl4');item.endDate=g('cl5');item.postUrls=g('cl8').split('\n').map(s=>s.trim()).filter(Boolean);delete item.postUrl;item.note=g('cl6').trim();
+  item.startDate=g('cl4');item.endDate=g('cl5');item.fee=g('cl9').trim();item.postUrls=g('cl8').split('\n').map(s=>s.trim()).filter(Boolean);delete item.postUrl;item.note=g('cl6').trim();
   save();cm();toast('수정됨');pgCampaign();
 }
 
@@ -2832,8 +2833,7 @@ function openAddCP(cid){
       <div class="fr"><label>발송일 <span style="color:#52B788;font-size:10px">(이카운트 출고)</span></label><input id="fsend" type="date" value="${today()}"></div>
       <div class="fr"><label>업로드일 <span style="color:#3B82F6;font-size:10px">(콘텐츠 게시)</span></label><input id="fupload" type="date" value="${today()}"></div>
     </div>
-    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" placeholder="30만원"></div><div class="fr"><label>비고</label><input id="fn" placeholder=""></div></div>`
-    :`<div class="fr"><label>비고</label><input id="fn" placeholder=""></div><input id="fee" style="display:none">`}
+    <div class="fg"><div class="fr"><label>단가</label><input id="fee" placeholder="30만원"></div><div class="fr"><label>비고</label><input id="fn" placeholder=""></div></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCP('${cid}')">추가</button></div>`);
 }
@@ -2853,8 +2853,7 @@ function openEditCP(cid,pid){
       <div class="fr"><label>발송일 <span style="color:#52B788;font-size:10px">(이카운트 출고)</span></label><input id="fsend" type="date" value="${p.sendDate||''}"></div>
       <div class="fr"><label>업로드일 <span style="color:#3B82F6;font-size:10px">(콘텐츠 게시)</span></label><input id="fupload" type="date" value="${p.uploadDate||''}"></div>
     </div>
-    ${isReels?`<div class="fg"><div class="fr"><label>비용</label><input id="fee" value="${e(p.fee||'')}"></div><div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div></div>`
-    :`<div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div><input id="fee" style="display:none" value="${e(p.fee||'')}">`}
+    <div class="fg"><div class="fr"><label>단가</label><input id="fee" value="${e(p.fee||'')}"></div><div class="fr"><label>비고</label><input id="fn" value="${e(p.note||'')}"></div></div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCP('${cid}','${pid}')">저장</button></div>`);
 }

@@ -1838,9 +1838,21 @@ function pgExposure(){
   }`;
 }
 // ── 게시물 갤러리 (인스타 임베드 + 반응 추적) ──
+// 유튜브 영상 번호 뽑기 (watch?v=… / youtu.be/… / shorts·embed·live/…)
+function ytVideoId(u){
+  const t=String(u||''); let m;
+  if((m=t.match(/[?&]v=([\w-]{6,})/))) return m[1];
+  if((m=t.match(/youtu\.be\/([\w-]{6,})/))) return m[1];
+  if((m=t.match(/youtube\.com\/(?:shorts|embed|live|v)\/([\w-]{6,})/))) return m[1];
+  return '';
+}
+// 같은 게시물인지 비교하는 키. 인스타는 ?뒤(추적 파라미터 등)를 떼고, 유튜브는 영상 번호로 구분해야
+// 서로 다른 유튜브 영상이 "같은 게시물"로 합쳐지지 않음 (반응수 기록/캡처/갤러리 중복제거 모두 이 키 사용)
 function normPostUrl(u){
   if(!u) return '';
-  return u.trim().split('?')[0].replace(/\/$/,'').toLowerCase();
+  const t=String(u).trim();
+  if(/youtube\.com|youtu\.be/i.test(t)){ const id=ytVideoId(t); if(id) return 'youtube:'+id; }
+  return t.split('?')[0].replace(/\/$/,'').toLowerCase();
 }
 function getEngagement(postUrl){
   const key=normPostUrl(postUrl);
@@ -1898,13 +1910,7 @@ function getPostUrls(p){
   return arr;
 }
 function isYoutubeUrl(u){ return /youtube\.com|youtu\.be/i.test(u||''); }
-function ytEmbedUrl(u){
-  let id='',m;
-  if((m=(u||'').match(/[?&]v=([^&]+)/))) id=m[1];
-  else if((m=(u||'').match(/youtu\.be\/([^?&]+)/))) id=m[1];
-  else if((m=(u||'').match(/youtube\.com\/shorts\/([^?&]+)/))) id=m[1];
-  return id?('https://www.youtube.com/embed/'+id):'';
-}
+function ytEmbedUrl(u){ const id=ytVideoId(u); return id?('https://www.youtube.com/embed/'+id):''; }
 function ensureIgEmbedScript(cb){
   if(window.instgrm){ cb&&cb(); return; }
   var existing=document.getElementById('ig-embed-script');
@@ -1997,11 +2003,10 @@ function pgExposureGallery(){
   function notHidden(src){ return !hiddenSet.has(gallerySrcKey(src)); }
 
   // 주간 리스트에 등록된 모든 핸들(정규화) - 캠페인/협업 인원 중복 방지용
+  // 아래 둘은 "실제로 갤러리에 표시되는 주간 리스트 인원" 기준으로 채워짐 (캠페인/협업 쪽 중복 제거용)
+  // → 배송완료 안 해서 안 보이는 사람이 캠페인 쪽에서도 "이미 있다"며 같이 사라지는 일이 없게
   const weeklyKeysByProj={};
-  DB.weekly.forEach(function(w){
-    const pk=w.project||'기본'; const set=weeklyKeysByProj[pk]||(weeklyKeysByProj[pk]=new Set());
-    w.people.forEach(function(p){ if(p.handle) set.add(normH(p.handle)); if(p.realname) set.add(normH(p.realname)); });
-  });
+  const weeklyUrlSet=new Set();
   function inWeekly(text,proj){   // proj를 주면 그 시딩 종류의 주간 리스트에서만 비교
     const key=normH(text);
     if(!key) return false;
@@ -2019,23 +2024,27 @@ function pgExposureGallery(){
   // 1) 주차별 그룹 (기존 로직)
   [...DB.weekly].sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(w){
     let people=(w.people||[]);
+    const pk=w.project||'기본';
     if(_galleryCat==='⭐즐겨찾기'){
       people=people.filter(function(p){return p.favorite;});
-    }else{
+    }else if(_galleryCat==='전체'){
       people=people.filter(function(p){return p.shipped;});
-      if(_galleryCat!=='전체'){
-        people=people.filter(function(p){return personCategories(p.handle,w.project||'기본').has(_galleryCat);});
-      }
+    }else{
+      // 캠페인/협업 탭: 배송완료 체크와 상관없이 그 캠페인/협업에 연결된 인원이면 표시
+      people=people.filter(function(p){return personCategories(p.handle,pk).has(_galleryCat);});
     }
+    const keySet=weeklyKeysByProj[pk]||(weeklyKeysByProj[pk]=new Set());
+    people.forEach(function(p){
+      if(p.handle) keySet.add(normH(p.handle)); if(p.realname) keySet.add(normH(p.realname));
+      getPostUrls(p).forEach(function(u){ weeklyUrlSet.add(normPostUrl(u)); });
+    });
     const items=people.map(function(p){
       return {handle:p.handle,product:(p.products||[p.product]).filter(Boolean).join(', ')||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'weekly',wid:w.id,pid:p.id}};
     }).filter(function(x){return notHidden(x.src);});
     if(items.length) groups.push({key:'w-'+w.id,label:'🗓 '+getMonthRound(w.id),dateLabel:w.date,items:items});
   });
 
-  // 주간 리스트에 이미 등록된 게시물 URL (같은 게시물이 카드로 두 번 뜨는 것 방지)
-  const weeklyUrlSet=new Set();
-  DB.weekly.forEach(function(w){ w.people.forEach(function(p){ getPostUrls(p).forEach(function(u){ weeklyUrlSet.add(normPostUrl(u)); }); }); });
+  // (weeklyUrlSet: 표시된 주간 인원의 게시물 URL — 같은 게시물이 카드로 두 번 뜨는 것 방지)
   // 캠페인/협업 인원 1명을 갤러리 아이템으로 변환 (URL은 주간 리스트에 없는 것만, URL이 없으면 이름 기준 중복 제거)
   function pickExtra(urlsAll, nameCandidates, proj){
     const own=urlsAll.filter(function(u){ return !weeklyUrlSet.has(normPostUrl(u)); });

@@ -135,6 +135,7 @@ tbody tr:hover td{background:#f8fbf8}
 /* MODAL */
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:999;align-items:center;justify-content:center;padding:20px}
 .ov.open{display:flex}
+.modal.wide{max-width:1100px}
 .modal{background:var(--w);border-radius:var(--r);width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)}
 .mh{padding:16px 20px 12px;border-bottom:1px solid var(--gray5);display:flex;align-items:center;justify-content:space-between}
 .mh h3{font-size:15px;font-weight:700}
@@ -171,6 +172,10 @@ tbody tr:hover td{background:#f8fbf8}
       <div class="sb-empty">위 탭을 눌러<br>목록을 확인하세요</div>
     </div>
     <div style="padding:10px 8px;border-top:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:5px">
+      <div style="display:flex;gap:5px">
+        <button id="undoBtn" onclick="doUndo()" title="되돌리기 (Ctrl+Z)" style="flex:1;padding:7px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(82,183,136,.35);color:#fff;font-size:11px;font-family:inherit;cursor:pointer;text-align:left;opacity:.4">↩ 되돌리기 <span style="opacity:.6">Ctrl+Z</span></button>
+        <button id="redoBtn" onclick="doRedo()" title="다시 실행 (Ctrl+Y)" style="padding:7px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:11px;font-family:inherit;cursor:pointer;opacity:.4">↪</button>
+      </div>
       <button onclick="backupData()" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:11px;font-family:inherit;cursor:pointer;text-align:left">💾 데이터 백업</button>
       <label style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-size:11px;font-family:inherit;cursor:pointer;display:block">
         📂 백업 불러오기
@@ -215,14 +220,90 @@ document.addEventListener('touchmove',e=>{
   if(Math.abs(t.clientX-_dragStartX)>5||Math.abs(t.clientY-_dragStartY)>5) _isDragging=true;
 },{passive:true});
 document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
-var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[],galleryHidden:[]};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[],galleryHidden:[],projects:[]};
 var cur={tab:'dash',campType:'릴스',id:null,expView:'list'};
 let _weeklyProject='기본'; // 주간 리스트 프로젝트 구분 (기본/백팩)
 function setWeeklyProject(p){
   _weeklyProject=p;
+  ensureWeeklyProject();
   cur.id=null; // 프로젝트 전환 시 상세 화면 닫고 목록으로
   renderSB();
   renderPage();
+}
+
+// ══════════════════════════════
+//  시딩 종류(프로젝트) — 탱글/백팩 외에 원하는 종류를 자유롭게 추가·이름변경·삭제
+// ══════════════════════════════
+const DEFAULT_PROJECTS=[{key:'기본',name:'탱글 시딩',icon:''},{key:'백팩',name:'백팩 시딩',icon:'🎒'}];
+function getProjects(){
+  const base=(DB.projects&&DB.projects.length)?DB.projects:DEFAULT_PROJECTS;
+  const list=base.map(p=>({key:p.key,name:p.name,icon:p.icon||''}));
+  if(!list.some(p=>p.key==='기본')) list.unshift({key:'기본',name:'탱글 시딩',icon:''});
+  // 주간 리스트에서 쓰이는데 목록에 없는 종류(예전 백업 등)도 사라지지 않게 자동 포함
+  (DB.weekly||[]).forEach(w=>{
+    const k=w.project||'기본';
+    if(!list.some(p=>p.key===k)) list.push({key:k,name:k==='백팩'?'백팩 시딩':k,icon:k==='백팩'?'🎒':''});
+  });
+  return list;
+}
+function projOf(key){ return getProjects().find(p=>p.key===key)||{key:key,name:key,icon:''}; }
+function projIcon(key){ return projOf(key).icon||''; }
+function projLabel(key){ const p=projOf(key); return (p.icon?p.icon+' ':'')+p.name; }
+function projPrefix(key){ const p=projOf(key); if(p.icon) return p.icon+' '; return key==='기본'?'':'['+p.name+'] '; }
+function projOptionsHtml(sel){ return getProjects().map(p=>`<option value="${e(p.key)}"${p.key===sel?' selected':''}>${e(projLabel(p.key))}</option>`).join(''); }
+function ensureWeeklyProject(){ if(!getProjects().some(p=>p.key===_weeklyProject)) _weeklyProject='기본'; }
+function projSave(list){ DB.projects=list; save(); }
+function openProjectManager(){
+  const list=getProjects();
+  const counts={}; DB.weekly.forEach(w=>{ const k=w.project||'기본'; counts[k]=(counts[k]||0)+1; });
+  const ist='padding:7px 9px;border:1px solid #e0e0e0;border-radius:7px;font-size:13px;font-family:inherit';
+  om(`<div class="mh"><h3>⚙ 시딩 종류 관리</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">탱글·백팩 말고도 원하는 시딩 종류를 자유롭게 만들 수 있어요. 종류마다 차수와 인원이 따로 관리돼요. 이름/아이콘은 바로 수정돼요.</p>
+    ${list.map((p,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+      <input value="${e(p.icon)}" maxlength="4" placeholder="아이콘" style="${ist};width:60px;text-align:center" onchange="projEdit(${i},'icon',this.value)">
+      <input value="${e(p.name)}" style="${ist};flex:1" onchange="projEdit(${i},'name',this.value)">
+      <span style="font-size:11px;color:#aaa;white-space:nowrap">${counts[p.key]||0}개 차수</span>
+      ${p.key==='기본'?'<span style="width:34px"></span>':`<button class="btn sm dan" onclick="projDelete(${i})">🗑</button>`}
+    </div>`).join('')}
+    <div class="sec" style="margin-top:16px">새 시딩 종류 추가</div>
+    <div style="display:flex;gap:6px">
+      <input id="np-icon" value="📦" maxlength="4" style="${ist};width:60px;text-align:center">
+      <input id="np-name" placeholder="예: 신제품 시딩, 협찬 시딩" style="${ist};flex:1" onkeydown="if(event.key==='Enter')projAdd()">
+      <button class="btn pri" onclick="projAdd()">추가</button>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">닫기</button></div>`);
+  setTimeout(()=>{ const el=document.getElementById('np-name'); if(el) el.focus(); },50);
+}
+function projEdit(i,field,val){
+  const list=getProjects(); if(!list[i]) return;
+  val=String(val||'').trim();
+  if(field==='name'&&!val){ toast('이름은 비울 수 없어요'); openProjectManager(); return; }
+  list[i][field]=val;
+  projSave(list); renderSB(); renderPage();
+}
+function projDelete(i){
+  const list=getProjects(); const p=list[i]; if(!p||p.key==='기본') return;
+  const n=DB.weekly.filter(w=>(w.project||'기본')===p.key).length;
+  if(n>0){ alert('"'+p.name+'"에 차수가 '+n+'개 있어요.\n차수를 먼저 삭제하거나 다른 종류로 옮긴 뒤 삭제해주세요.'); return; }
+  if(!confirm('"'+p.name+'" 시딩 종류를 삭제할까요?')) return;
+  list.splice(i,1);
+  if(_weeklyProject===p.key) _weeklyProject='기본';
+  projSave(list); renderSB(); renderPage(); openProjectManager();
+}
+function projAdd(){
+  const name=(document.getElementById('np-name').value||'').trim();
+  const icon=(document.getElementById('np-icon').value||'').trim();
+  if(!name){ toast('시딩 이름을 입력해주세요'); return; }
+  const list=getProjects();
+  if(list.some(p=>p.name.replace(/\s+/g,'').toLowerCase()===name.replace(/\s+/g,'').toLowerCase())){ toast('이미 있는 이름이에요'); return; }
+  const key='pj'+uid();
+  list.push({key,name,icon});
+  projSave(list);
+  _weeklyProject=key; cur.id=null;
+  cm(); renderSB(); renderPage();
+  toast('"'+name+'" 시딩이 만들어졌어요. ＋ 새 주간 리스트로 차수를 추가하세요');
 }
 let _uid=100;
 const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
@@ -232,8 +313,131 @@ const uid=()=>'x'+(Date.now().toString(36)+Math.random().toString(36).slice(2,5)
 // ══════════════════════════════
 function loadDB(){ /* Firebase 모듈에서 처리 */ }
 function save(){
+  if(typeof stampProjectScope==='function') stampProjectScope();
+  undoRecord();
   if(window._fbSave) window._fbSave();
 }
+
+// ══════════════════════════════
+//  되돌리기 (Ctrl+Z) / 다시 실행 (Ctrl+Y 또는 Ctrl+Shift+Z)
+//  - 저장(save)할 때마다 "저장 직전 상태"를 기록해두고, 되돌리면 그 상태로 통째로 복원 후 다시 저장합니다.
+//  - 삭제 / 수정 / 이동 / 가져오기 / 일괄등록 등 save()를 거치는 모든 작업이 대상입니다.
+//  - 새로고침하거나 다른 기기·자동 캡처로 데이터가 갱신되면 기록은 초기화됩니다.
+// ══════════════════════════════
+let _undoLast=null,_undoStack=[],_redoStack=[],_undoBusy=false,_undoPushT=0;
+const UNDO_MAX=100;
+const UNDO_LABEL={weekly:'주간 리스트',monthly:'월간',campaigns:'캠페인',exposure:'노출 보고서',cost:'현물정산',collabs:'협업',engagement:'반응수 기록',screenshots:'캡처',galleryHidden:'갤러리 카드',projects:'시딩 종류'};
+function undoSnap(){
+  const snap={};
+  Object.keys(DB).forEach(function(k){
+    const str=JSON.stringify(DB[k]);
+    if(str===undefined) return;
+    snap[k]=(_undoLast&&_undoLast[k]===str)?_undoLast[k]:str; // 안 바뀐 부분은 기존 문자열 재사용(메모리 절약)
+  });
+  return snap;
+}
+function undoDiffers(a,b){
+  const ks=new Set(Object.keys(a).concat(Object.keys(b)));
+  for(const k of ks){ if(a[k]!==b[k]) return true; }
+  return false;
+}
+function undoRecord(){
+  if(_undoBusy) return;
+  let cur;
+  try{ cur=undoSnap(); }catch(err){ return; }
+  if(_undoLast&&undoDiffers(_undoLast,cur)){
+    const now=Date.now();
+    // 한 번의 동작이 save()를 연달아 부르는 경우(0.35초 이내)는 한 단계로 합침
+    if(now-_undoPushT>350||!_undoStack.length){
+      _undoStack.push(_undoLast);
+      if(_undoStack.length>UNDO_MAX) _undoStack.shift();
+    }
+    _undoPushT=now;
+    _redoStack=[];
+  }
+  _undoLast=cur;
+  undoUpdateBtn();
+}
+function undoRebase(){ _undoLast=undoSnap(); undoUpdateBtn(); }                 // 현재 상태를 기준점으로
+function undoReset(){ _undoStack=[]; _redoStack=[]; undoRebase(); }              // 기록 초기화(다른 기기/자동화 변경 수신 시)
+function undoCount(str,mode){
+  try{
+    const a=JSON.parse(str||'[]'); if(!Array.isArray(a)) return 0;
+    if(mode==='people') return a.reduce(function(n,x){return n+((x&&x.people)?x.people.length:0);},0);
+    return a.length;
+  }catch(err){ return 0; }
+}
+function undoDescribe(from,to){
+  const parts=[];
+  Object.keys(UNDO_LABEL).forEach(function(k){
+    if((from[k]||'')===(to[k]||'')) return;
+    let txt=UNDO_LABEL[k];
+    if(k==='galleryHidden'){
+      const d=undoCount(to[k])-undoCount(from[k]);
+      txt+=d<0?' '+(-d)+'개 복구':' 숨김';
+    }else{
+      let d=0,unit='건';
+      if(k==='weekly'||k==='campaigns'){ d=undoCount(to[k],'people')-undoCount(from[k],'people'); unit='명'; }
+      if(!d){ d=undoCount(to[k])-undoCount(from[k]); unit=(k==='weekly'||k==='campaigns')?'개 차수':'건'; }
+      if(d>0) txt+=' '+d+unit+' 복구';
+      else if(d<0) txt+=' '+(-d)+unit+' 취소';
+      else txt+=' 수정';
+    }
+    parts.push(txt);
+  });
+  return parts.length?parts.join(' · '):'변경 내용';
+}
+function undoRestore(snap){
+  const nd={};
+  Object.keys(snap).forEach(function(k){ nd[k]=JSON.parse(snap[k]); });
+  ['weekly','monthly','campaigns','exposure','cost','collabs','engagement','screenshots','galleryHidden','projects'].forEach(function(k){ if(nd[k]===undefined) nd[k]=[]; });
+  DB=nd;
+}
+function undoRun(from,to,msg){
+  const desc=undoDescribe(from,to);
+  _undoBusy=true;
+  try{
+    undoRestore(to);
+    cm();                 // 열려 있던 팝업은 닫기
+    save();               // 복원된 상태를 다시 저장(동기화)
+  }finally{ _undoBusy=false; }
+  _undoLast=undoSnap();
+  try{ renderSB(); renderPage(); }catch(err){ cur.id=null; renderSB(); renderPage(); }
+  undoUpdateBtn();
+  toast(msg+' · '+desc);
+}
+function doUndo(){
+  if(!_undoStack.length){ toast('되돌릴 작업이 없어요 (새로고침하거나 다른 기기에서 데이터가 바뀌면 기록이 초기화돼요)'); return; }
+  const now=undoSnap(), prev=_undoStack.pop();
+  _redoStack.push(now);
+  undoRun(now,prev,'↩ 되돌렸어요');
+}
+function doRedo(){
+  if(!_redoStack.length){ toast('다시 실행할 작업이 없어요'); return; }
+  const now=undoSnap(), next=_redoStack.pop();
+  _undoStack.push(now);
+  undoRun(now,next,'↪ 다시 실행했어요');
+}
+function undoUpdateBtn(){
+  const u=document.getElementById('undoBtn'), r=document.getElementById('redoBtn');
+  if(u){ u.style.opacity=_undoStack.length?'1':'.4'; u.title='되돌리기 (Ctrl+Z) · 가능한 단계 '+_undoStack.length; }
+  if(r){ r.style.opacity=_redoStack.length?'1':'.4'; r.title='다시 실행 (Ctrl+Y) · 가능한 단계 '+_redoStack.length; }
+}
+// 단축키: 글자 입력칸에 커서가 있을 땐 브라우저 기본 "입력 취소"를 쓰도록 양보
+document.addEventListener('keydown',function(ev){
+  if(!(ev.ctrlKey||ev.metaKey)||ev.altKey) return;
+  const isZ=ev.code==='KeyZ'||(ev.key&&ev.key.toLowerCase()==='z');
+  const isY=ev.code==='KeyY'||(ev.key&&ev.key.toLowerCase()==='y');
+  if(!isZ&&!isY) return;
+  const t=ev.target, tag=t&&t.tagName;
+  if(tag==='TEXTAREA'||(t&&t.isContentEditable)) return;
+  if(tag==='INPUT'){
+    const type=(t.getAttribute('type')||'text').toLowerCase();
+    if(['checkbox','radio','button','submit','file','range','color','image','reset'].indexOf(type)<0) return; // 글자/숫자/날짜 입력칸
+  }
+  ev.preventDefault();
+  if(isY||(isZ&&ev.shiftKey)) doRedo(); else doUndo();
+});
 
 
 
@@ -409,10 +613,31 @@ const typeTag=t=>{
 const typeOpts=sel=>['피드','릴스','유튜브','단순 선물','시딩','피드 or 릴스','유튜브 or 피드','zvzo 협업','브랜더진 협업','기타'].map(t=>`<option${t===sel?' selected':''}>${t}</option>`).join('');
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('on');setTimeout(()=>el.classList.remove('on'),2400);}
 
-// 캠페인 참여 배지 (핸들 기준)
-function campBadges(handle){
+
+// ══════════════════════════════
+//  캠페인/협업 딱지는 "진행한 시딩 종류" 안에서만 작동
+//  (같은 활동명이 탱글/백팩 양쪽에 있어도 딱지는 서로 영향 없음)
+// ══════════════════════════════
+function weeklyProjectsOf(handle){
+  const k=normH(handle); const out=[];
+  DB.weekly.forEach(w=>{ const pk=w.project||'기본'; if(out.indexOf(pk)<0&&w.people.some(p=>normH(p.handle)===k)) out.push(pk); });
+  return out;
+}
+function inferProject(handle){ const ps=weeklyProjectsOf(handle); if(!ps.length) return '기본'; return ps.indexOf('기본')>=0?'기본':ps[0]; }
+function scopeProj(p){ return p.project||inferProject(p.handle); }                       // 캠페인 인원의 시딩 종류
+function collabScope(it){ return it.project||inferProject(it.handle||it.name); }         // 협업 일정의 시딩 종류
+function stampProjectScope(){   // 예전 데이터에 "어느 시딩 종류인지" 도장을 찍어둠(이미 찍힌 건 그대로)
+  let n=0;
+  (DB.campaigns||[]).forEach(c=>(c.people||[]).forEach(p=>{ if(!p.project){ p.project=inferProject(p.handle); n++; } }));
+  (DB.collabs||[]).forEach(it=>{ if(!it.project){ it.project=inferProject(it.handle||it.name); n++; } });
+  return n;
+}
+
+// 캠페인 참여 배지 (핸들 + 시딩 종류 기준)
+function campBadges(handle,proj){
   const key=normH(handle);
-  const campBadgeHtml=DB.campaigns.filter(c=>c.people.some(p=>normH(p.handle)===key)).map(c=>{
+  proj=proj||'기본';
+  const campBadgeHtml=DB.campaigns.filter(c=>c.people.some(p=>normH(p.handle)===key&&scopeProj(p)===proj)).map(c=>{
     const col=c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':
               c.type==='릴스'?'background:#EEF2FF;color:#3730A3':
               c.type==='zvzo 협업'?'background:#EDE9FE;color:#5B21B6':
@@ -420,39 +645,44 @@ function campBadges(handle){
               c.type==='브랜디드'?'background:#FEE2E2;color:#991B1B':
               c.type==='유튜브'?'background:#FEF9C3;color:#854D0E':
               'background:#F1F5F9;color:#475569';
-    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">${c.name} ${c.round}차<span onclick="event.stopPropagation();unlinkCampBadge('${c.id}','${e(handle)}')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>`;
+    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">${c.name} ${c.round}차<span onclick="event.stopPropagation();unlinkCampBadge('${c.id}','${e(handle)}','${e(proj)}')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>`;
   }).join('');
   // collab 딱지
-  const collabBadgeHtml=DB.weekly.flatMap(w=>w.people).filter(p=>normH(p.handle)===key&&(p.collabTags||[]).length)
+  const collabBadgeHtml=DB.weekly.filter(w=>(w.project||'기본')===proj).flatMap(w=>w.people).filter(p=>normH(p.handle)===key&&(p.collabTags||[]).length)
     .flatMap(p=>p.collabTags||[]).filter((v,i,a)=>a.indexOf(v)===i)
-    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">'+b+' 협업<span onclick="event.stopPropagation();unlinkCollabBadge(\''+e(handle)+'\',\''+b+'\')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>')
+    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">'+b+' 협업<span onclick="event.stopPropagation();unlinkCollabBadge(\''+e(handle)+'\',\''+b+'\',\''+e(proj)+'\')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>')
     .join('');
   return campBadgeHtml+collabBadgeHtml||'';
 }
 
-// 잘못 붙은 캠페인 딱지 연결 해제 (핸들 표기 차이로 오매칭된 경우 포함)
-function unlinkCampBadge(campId,handle){
-  if(!confirm('이 캠페인 딱지를 해제할까요? (캠페인 자체의 인원 데이터에서 이 활동명이 제거됩니다)'))return;
+// 잘못 붙은 캠페인 딱지 연결 해제 — 이 시딩 종류에서 진행한 기록만 지움 (다른 시딩 종류의 딱지는 그대로)
+function unlinkCampBadge(campId,handle,proj){
+  proj=proj||'기본';
+  if(!confirm('이 캠페인 딱지를 해제할까요?\n('+projLabel(proj)+'에서 진행한 기록만 제거돼요. 다른 시딩 종류의 딱지는 그대로 남아요)'))return;
   const c=DB.campaigns.find(x=>x.id===campId);if(!c)return;
   const key=normH(handle);
-  c.people=c.people.filter(p=>normH(p.handle)!==key);
-  save();renderSB();renderPage();toast('캠페인 딱지 해제됨');
+  c.people=c.people.filter(p=>!(normH(p.handle)===key&&scopeProj(p)===proj));
+  save();renderSB();renderPage();toast('캠페인 딱지 해제됨 ('+projLabel(proj)+')');
 }
-function unlinkCollabBadge(handle,brand){
+function unlinkCollabBadge(handle,brand,proj){
+  proj=proj||'기본';
   const key=normH(handle);
-  DB.weekly.forEach(w=>w.people.forEach(p=>{
-    if(normH(p.handle)===key&&p.collabTags){p.collabTags=p.collabTags.filter(t=>t!==brand);}
-  }));
-  save();renderSB();renderPage();toast('협업 딱지 해제됨');
+  DB.weekly.forEach(w=>{
+    if((w.project||'기본')!==proj) return;
+    w.people.forEach(p=>{ if(normH(p.handle)===key&&p.collabTags){p.collabTags=p.collabTags.filter(t=>t!==brand);} });
+  });
+  save();renderSB();renderPage();toast('협업 딱지 해제됨 ('+projLabel(proj)+')');
 }
 
 // 주간에서 드롭다운으로 캠페인 추가
-function addToCampOrCollab(handle,val){
+function addToCampOrCollab(handle,val,proj){
+  proj=proj||'기본';
   if(!val) return;
   if(val.startsWith('collab:')){
     const brand=val.replace('collab:','');
     // 주간 인원에 협업 딱지 추가 (campaigns 연결과 별도)
     DB.weekly.forEach(function(w){
+      if((w.project||'기본')!==proj) return;   // 이 시딩 종류의 사람에게만 딱지 추가
       w.people.forEach(function(p){
         if(normH(p.handle)===normH(handle)){
           if(!p.collabTags) p.collabTags=[];
@@ -462,16 +692,17 @@ function addToCampOrCollab(handle,val){
     });
     save();renderSB();renderPage();toast(handle+' → '+brand+' 협업 딱지 추가됨');
   } else {
-    addToCamp(handle,val);
+    addToCamp(handle,val,proj);
   }
 }
 
-function addToCamp(handle,campId){
+function addToCamp(handle,campId,proj){
+  proj=proj||'기본';
   if(!campId) return;
   const c=DB.campaigns.find(x=>x.id===campId);if(!c)return;
-  if(c.people.some(p=>normH(p.handle)===normH(handle))){toast('이미 추가됨');return;}
-  let src=null;DB.weekly.forEach(w=>{const f=w.people.find(p=>normH(p.handle)===normH(handle));if(f)src=f;});
-  c.people.push({id:'cp'+uid(),handle:src?.handle||handle,url:src?.url||'',followers:src?.followers||0,product:src?.product||'',contact:src?.contact||'',address:src?.address||'',fee:'',note:''});
+  if(c.people.some(p=>normH(p.handle)===normH(handle)&&scopeProj(p)===proj)){toast('이미 추가됨');return;}
+  let src=null;DB.weekly.forEach(w=>{if((w.project||'기본')!==proj)return;const f=w.people.find(p=>normH(p.handle)===normH(handle));if(f)src=f;});
+  c.people.push({id:'cp'+uid(),project:proj,handle:src?.handle||handle,url:src?.url||'',followers:src?.followers||0,products:prodList(src),product:prodStr(src),contact:src?.contact||'',address:src?.address||'',fee:'',note:''});
   save();renderSB();renderPage();toast(`${handle} → ${c.name} ${c.round}차 추가됨`);
 }
 
@@ -524,11 +755,12 @@ function renderSB(){
     el.innerHTML=h;return;
   }
   if(t==='weekly'){
-    // 프로젝트 전환 탭 (탱글 시딩 / 백팩 시딩)
-    h+=`<div style="display:flex;gap:4px;padding:0 4px 10px">
-      <button onclick="setWeeklyProject('기본')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='기본'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">탱글 시딩</button>
-      <button onclick="setWeeklyProject('백팩')" style="flex:1;padding:7px 4px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:${_weeklyProject==='백팩'?'#52B788':'rgba(255,255,255,.08)'};color:#fff">🎒 백팩 시딩</button>
+    // 프로젝트(시딩 종류) 전환 탭
+    ensureWeeklyProject();
+    h+=`<div style="display:flex;flex-wrap:wrap;gap:4px;padding:0 4px 6px">
+      ${getProjects().map(p=>`<button data-k="${e(p.key)}" onclick="setWeeklyProject(this.dataset.k)" style="flex:1 1 auto;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;white-space:nowrap;background:${_weeklyProject===p.key?'#52B788':'rgba(255,255,255,.08)'};color:#fff">${e(projLabel(p.key))}</button>`).join('')}
     </div>
+    <div style="padding:0 4px 10px"><button onclick="openProjectManager()" style="width:100%;padding:5px 8px;border-radius:7px;border:1px dashed rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.65);font-size:11px;font-family:inherit;cursor:pointer">＋ 시딩 종류 추가 · 관리</button></div>
     <div style="padding:0 4px 10px">
       <input type="text" id="sbWeeklySearchInput" oninput="sbWeeklySearch(this.value)" placeholder="🔍 활동명 검색 (전체)" style="width:100%;padding:7px 10px;border:none;border-radius:8px;font-size:12px;font-family:inherit;background:rgba(255,255,255,.9)">
       <div id="sbWeeklySearchResult"></div>
@@ -557,7 +789,7 @@ function renderSB(){
         </button>`;
       });
     });
-    h+=`<button class="sb-add" onclick="openAddW()">＋ 새 ${_weeklyProject==='백팩'?'🎒 백팩 ':''}주간 리스트</button>`;
+    h+=`<button class="sb-add" onclick="openAddW()">＋ 새 ${_weeklyProject==='기본'?'':e(projLabel(_weeklyProject))+' '}주간 리스트</button>`;
   } else if(t==='monthly'){
     h+=`<div class="sb-ttl">월간 리스트</div>`;
     [...DB.monthly].sort((a,b)=>b.month.localeCompare(a.month)).forEach(m=>{
@@ -1135,8 +1367,7 @@ function costParseXlsx(input,month){
 // ── 대시보드 ──
 function pgDash(){
   const total=DB.weekly.reduce((a,w)=>a+w.people.length,0);
-  const basicTotal=DB.weekly.filter(w=>(w.project||'기본')==='기본').reduce((a,w)=>a+w.people.length,0);
-  const backpackTotal=DB.weekly.filter(w=>w.project==='백팩').reduce((a,w)=>a+w.people.length,0);
+  const projTotals=getProjects().map(p=>({p:p,n:DB.weekly.filter(w=>(w.project||'기본')===p.key).reduce((a,w)=>a+w.people.length,0)}));
   const totalF=DB.weekly.flatMap(w=>w.people).reduce((a,p)=>a+(p.followers||0),0);
   const totalFee=DB.campaigns.flatMap(c=>c.people).reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
   const recent=[...DB.weekly].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
@@ -1145,7 +1376,7 @@ function pgDash(){
   document.getElementById('nav-act').innerHTML=`<button class="btn" style="font-size:11px;color:#999" onclick="resetData()" title="데이터 초기화 (주의: 모든 데이터가 기본값으로 리셋됩니다)">🔄 데이터 초기화</button>`;
   document.getElementById('page').innerHTML=`
   <div class="stats">
-    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">탱글 ${basicTotal}명 · 🎒 백팩 ${backpackTotal}명</div></div>
+    <div class="sc"><div class="sc-l">총 시딩 인원</div><div class="sc-n">${total}<small>명</small></div><div class="sc-s">${projTotals.map(x=>e(projLabel(x.p.key))+' '+x.n+'명').join(' · ')}</div></div>
     <div class="sc"><div class="sc-l">총 팔로워 도달</div><div class="sc-n">${Math.round(totalF/10000)}<small>만</small></div></div>
     <div class="sc"><div class="sc-l">캠페인 유형</div><div class="sc-n">${new Set(DB.campaigns.map(c=>c.type)).size}<small>종</small></div><div class="sc-s">릴스 · 2차 활용</div></div>
     <div class="sc"><div class="sc-l">캠페인 비용</div><div class="sc-n">${totalFee}<small>만원</small></div></div>
@@ -1153,7 +1384,7 @@ function pgDash(){
   <div class="dbgrid">
     <div class="dc"><h3>최근 주간 리스트</h3>
       ${recent.map(w=>`<div class="ri" onclick="setWeeklyProject('${w.project||'기본'}');selW('${w.id}')">
-        <div class="ri-ico">${(w.project==='백팩'?'🎒':getMonthRound(w.id).replace(/🎒 |\d+월 /g,''))}</div>
+        <div class="ri-ico">${projIcon(w.project||'기본')||getMonthRoundPlain(w.id).replace(/\d+월 /,'')}</div>
         <div><div class="rin">${getMonthRound(w.id)}</div><div class="ris">${w.date}</div></div>
         <span class="ribk">${w.people.length}명</span>
       </div>`).join('')}
@@ -1197,19 +1428,20 @@ function sbWeeklySearch(q){
     const proj=m.w.project||'기본';
     return `<div onclick="setWeeklyProject('${proj}');selW('${m.w.id}')" style="padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,.06);margin-top:4px">
       <div style="font-size:12px;font-weight:700;color:#fff">${e(m.p.handle)}</div>
-      <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:1px">${proj==='백팩'?'🎒 ':''}${getMonthRound(m.w.id).replace('🎒 ','')} · ${m.w.date.slice(5)}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:1px">${getMonthRound(m.w.id)} · ${m.w.date.slice(5)}</div>
     </div>`;
   }).join('');
 }
 function pgWeekly(){
   const w=cur.id?DB.weekly.find(x=>x.id===cur.id):null;
   if(!w){
+    ensureWeeklyProject();
     const projWeekly=DB.weekly.filter(x=>(x.project||'기본')===_weeklyProject);
     const sorted=[...projWeekly].sort((a,b)=>b.round-a.round);
-    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddW()">＋ 새 ${_weeklyProject==='백팩'?'🎒 백팩 ':''}주간 리스트</button>`;
+    document.getElementById('nav-act').innerHTML=`<button class="btn pri" onclick="openAddW()">＋ 새 ${_weeklyProject==='기본'?'':e(projLabel(_weeklyProject))+' '}주간 리스트</button>`;
     document.getElementById('page').innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">${_weeklyProject==='백팩'?'🎒 백팩 시딩':'탱글 시딩'}</h2>
+      <h2 style="font-size:16px;font-weight:700;color:#1D4E3A">${e(projLabel(_weeklyProject))}</h2><button class="btn sm" onclick="openProjectManager()">⚙ 시딩 종류 관리</button>
     </div>
     <div class="stats">
       <div class="sc"><div class="sc-l">총 차수</div><div class="sc-n">${projWeekly.length}<small>차</small></div></div>
@@ -1221,7 +1453,7 @@ function pgWeekly(){
       <div class="tw-h"><h3>전체 주간 리스트</h3><span class="sub">차수/날짜 직접 수정 가능</span></div>
       <div class="tsc"><table>
         <thead><tr><th>차수</th><th>날짜</th><th>인원</th><th>팔로워 합계</th><th></th></tr></thead>
-        <tbody>${sorted.length===0?`<tr><td colspan="5" class="nodata">${_weeklyProject==='백팩'?'🎒 백팩 시딩 차수가 아직 없어요. 위 버튼으로 추가해보세요':'주간 리스트를 추가해주세요'}</td></tr>`:sorted.map(w=>`<tr>
+        <tbody>${sorted.length===0?`<tr><td colspan="5" class="nodata">${e(projLabel(_weeklyProject))} 차수가 아직 없어요. 위 버튼으로 추가해보세요</td></tr>`:sorted.map(w=>`<tr>
           <td><input type="number" value="${w.round}" min="1" style="width:50px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updWRound('${w.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
           <td><input type="date" value="${w.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updWDate('${w.id}',this.value)"></td>
           <td>${w.people.length}명</td>
@@ -1258,13 +1490,14 @@ function pgWeekly(){
       <thead><tr><th>#</th><th>배송 상태</th><th>활동명</th><th>캠페인</th><th>채널 URL</th><th>팔로워</th><th>제품</th><th>컨택 포인트</th><th>전화번호</th><th>발송일</th><th>업로드일</th><th>배송지</th><th>유형</th><th>비고</th><th></th></tr></thead>
       <tbody>${w.people.length===0?`<tr><td colspan="15" class="nodata">인원 추가 또는 📋 붙여넣기를 이용하세요</td></tr>`:
         w.people.map((p,i)=>{
-          const badges=campBadges(p.handle);
-          const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)));
+          const wproj=w.project||'기본';
+          const badges=campBadges(p.handle,wproj);
+          const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)&&scopeProj(cp)===wproj));
           const availCollabs=(DB.collabs||[]).filter(c=>c.name!==p.handle);
           const collabBrands=[...new Set(availCollabs.map(c=>c.brand))];
           const collabOpts=collabBrands.map(b=>'<option value="collab:'+b+'">'+b+' 협업</option>').join('');
           const hasOpts=avail.length||availCollabs.length;
-          const dropdown=hasOpts?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCampOrCollab('${p.handle}',this.value);this.value=''">
+          const dropdown=hasOpts?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCampOrCollab('${p.handle}',this.value,'${wproj}');this.value=''">
             <option value="">+ 캠페인 추가</option>
             ${avail.map(c=>`<option value="${c.id}">${c.name} ${c.round}차</option>`).join('')}
             ${collabOpts}
@@ -1354,7 +1587,7 @@ function pgMonthly(){
     </div>
     <div id="wb-${w.id}"><div class="tsc"><table>
       <thead><tr><th>활동명</th><th>캠페인</th><th>채널</th><th>팔로워</th><th>제품</th><th>연락처</th><th>배송지</th><th>유형</th></tr></thead>
-      <tbody>${w.people.map(p=>{const cb=campBadges(p.handle);return`<tr style="${cb?'background:#FAFFFE':''}">
+      <tbody>${w.people.map(p=>{const cb=campBadges(p.handle,w.project||'기본');return`<tr style="${cb?'background:#FAFFFE':''}">
         <td style="font-weight:700">${e(p.handle)}</td>
         <td style="min-width:120px">${cb||`<span style="font-size:10px;color:#ccc">—</span>`}</td>
         <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
@@ -1474,10 +1707,10 @@ function pgCampaign(){
       <tbody>${c.people.length===0?`<tr><td colspan="12" class="nodata">인원을 추가해주세요</td></tr>`:
         c.people.map((p,i)=>`<tr>
           <td style="color:#ccc">${i+1}</td>
-          <td style="font-weight:700">${e(p.handle)}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):''}</td>
+          <td style="font-weight:700">${e(p.handle)}${scopeProj(p)!=='기본'?` <span title="이 시딩 종류에서 진행한 기록" style="font-size:9px;font-weight:600;color:#5B21B6;background:#EDE9FE;border-radius:10px;padding:1px 6px">${e(projLabel(scopeProj(p)))}</span>`:''}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):''}</td>
           <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
           <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
-          <td style="max-width:160px;font-size:11px">${e(p.product)||'<span style="color:#bbb">미정</span>'}</td>
+          <td style="max-width:160px;font-size:11px">${e(prodStr(p))||'<span style="color:#bbb">미정</span>'}</td>
           <td style="font-size:11px;color:#52B788">${p.sendDate||'-'}</td>
           <td style="font-size:11px;color:#3B82F6">${p.uploadDate||'-'}</td>
           <td><span class="tag ${isDM(p.contact)?'t-dm':p.contact&&p.contact.includes('@')?'t-em':'t-ph'}">${e(p.contact)||'-'}</span></td>
@@ -1699,22 +1932,25 @@ function deleteFromGallery(src){
   toast('갤러리에서 지웠어요');
   pgExposureGallery();
 }
-function personCategories(handle){
+function personCategories(handle,proj){
   const key=normH(handle);
   const cats=new Set();
+  const inScope=function(pr){ return !proj||pr===proj; };
   DB.campaigns.forEach(function(c){
-    if(c.people.some(function(p){return normH(p.handle)===key;})){
+    if(c.people.some(function(p){return normH(p.handle)===key&&inScope(scopeProj(p));})){
       if(c.type==='릴스') cats.add('릴스캠페인');
-      if(c.type==='2차 활용') cats.add('2차활용');
+      else if(c.type==='2차 활용') cats.add('2차활용');
+      else cats.add('camp:'+c.type); // 새로 만든 캠페인 유형도 자동으로 카테고리가 됨
     }
   });
   (DB.collabs||[]).forEach(function(item){
-    if(normH(item.handle)===key||normH(item.name)===key){
+    if((normH(item.handle)===key||normH(item.name)===key)&&inScope(collabScope(item))){
       if(item.brand==='zvzo') cats.add('zvzo');
       if(item.brand==='브랜더진') cats.add('브랜더진');
     }
   });
   DB.weekly.forEach(function(w){
+    if(!inScope(w.project||'기본')) return;
     w.people.forEach(function(p){
       if(normH(p.handle)===key&&p.collabTags){
         p.collabTags.forEach(function(t){
@@ -1751,24 +1987,29 @@ let _galleryBaseGroups=null; // 카테고리 기준으로 필터된 기본 그�
 
 function pgExposureGallery(){
   const pg=document.getElementById('page');
-  const catList=['전체','릴스캠페인','2차활용','zvzo','브랜더진','⭐즐겨찾기'];
+  // 캠페인 탭에서 새로 만든 유형(예: 크픽, 슬기롭다 등)은 갤러리 탭으로 자동 추가
+  const customTypes=[...new Set(DB.campaigns.map(function(c){return c.type;}).filter(function(t){return t&&t!=='릴스'&&t!=='2차 활용';}))];
+  const catList=['전체','릴스캠페인','2차활용'].concat(customTypes.map(function(t){return 'camp:'+t;})).concat(['zvzo','브랜더진','⭐즐겨찾기']);
   const catLabel={'전체':'전체','릴스캠페인':'🎬 릴스 캠페인','2차활용':'♻️ 2차 활용','zvzo':'🔗 zvzo','브랜더진':'🏷 브랜더진','⭐즐겨찾기':'⭐ 즐겨찾기'};
+  customTypes.forEach(function(t){ catLabel['camp:'+t]='📌 '+t; });
+  if(catList.indexOf(_galleryCat)<0) _galleryCat='전체'; // 삭제/이름변경된 유형 탭이 선택돼 있던 경우 방어
   const hiddenSet=new Set(DB.galleryHidden||[]);
   function notHidden(src){ return !hiddenSet.has(gallerySrcKey(src)); }
 
   // 주간 리스트에 등록된 모든 핸들(정규화) - 캠페인/협업 인원 중복 방지용
-  const weeklyHandleKeys=new Set();
-  DB.weekly.forEach(function(w){ w.people.forEach(function(p){
-    if(p.handle) weeklyHandleKeys.add(normH(p.handle));
-    if(p.realname) weeklyHandleKeys.add(normH(p.realname));
-  }); });
-  function inWeekly(text){
+  const weeklyKeysByProj={};
+  DB.weekly.forEach(function(w){
+    const pk=w.project||'기본'; const set=weeklyKeysByProj[pk]||(weeklyKeysByProj[pk]=new Set());
+    w.people.forEach(function(p){ if(p.handle) set.add(normH(p.handle)); if(p.realname) set.add(normH(p.realname)); });
+  });
+  function inWeekly(text,proj){   // proj를 주면 그 시딩 종류의 주간 리스트에서만 비교
     const key=normH(text);
     if(!key) return false;
-    if(weeklyHandleKeys.has(key)) return true;
-    if(key.length<2) return false;
-    for(const k of weeklyHandleKeys){
-      if(k.length>=2&&(k.includes(key)||key.includes(k))) return true;
+    const sets=proj?[weeklyKeysByProj[proj]||new Set()]:Object.keys(weeklyKeysByProj).map(function(k){return weeklyKeysByProj[k];});
+    for(let si=0;si<sets.length;si++){
+      const set=sets[si];
+      if(set.has(key)) return true;
+      if(key.length>=2){ for(const k of set){ if(k.length>=2&&(k.includes(key)||key.includes(k))) return true; } }
     }
     return false;
   }
@@ -1783,7 +2024,7 @@ function pgExposureGallery(){
     }else{
       people=people.filter(function(p){return p.shipped;});
       if(_galleryCat!=='전체'){
-        people=people.filter(function(p){return personCategories(p.handle).has(_galleryCat);});
+        people=people.filter(function(p){return personCategories(p.handle,w.project||'기본').has(_galleryCat);});
       }
     }
     const items=people.map(function(p){
@@ -1792,31 +2033,50 @@ function pgExposureGallery(){
     if(items.length) groups.push({key:'w-'+w.id,label:'🗓 '+getMonthRound(w.id),dateLabel:w.date,items:items});
   });
 
-  // 2) 캠페인(릴스/2차 활용) 인원 중 주간 리스트에 없는 사람들
+  // 주간 리스트에 이미 등록된 게시물 URL (같은 게시물이 카드로 두 번 뜨는 것 방지)
+  const weeklyUrlSet=new Set();
+  DB.weekly.forEach(function(w){ w.people.forEach(function(p){ getPostUrls(p).forEach(function(u){ weeklyUrlSet.add(normPostUrl(u)); }); }); });
+  // 캠페인/협업 인원 1명을 갤러리 아이템으로 변환 (URL은 주간 리스트에 없는 것만, URL이 없으면 이름 기준 중복 제거)
+  function pickExtra(urlsAll, nameCandidates, proj){
+    const own=urlsAll.filter(function(u){ return !weeklyUrlSet.has(normPostUrl(u)); });
+    if(urlsAll.length){
+      if(!own.length) return null;           // 전부 주간 리스트에 이미 있는 게시물
+      return own;                            // 캠페인/협업에서 직접 등록한 URL은 이름이 겹쳐도 무조건 노출
+    }
+    const dup=nameCandidates.some(function(n){ return n&&inWeekly(n,proj); });
+    return dup?null:[];                      // URL 없는 사람은 주간 리스트와 겹치면 숨김
+  }
+
+  // 2) 캠페인 인원 (릴스/2차 활용 + 새로 만든 모든 유형)
   if(_galleryCat!=='⭐즐겨찾기'&&_galleryCat!=='zvzo'&&_galleryCat!=='브랜더진'){
     DB.campaigns.forEach(function(c){
-      const wantType=_galleryCat==='전체'?null:(_galleryCat==='릴스캠페인'?'릴스':'2차 활용');
-      if(wantType&&c.type!==wantType) return;
-      if(!wantType&&c.type!=='릴스'&&c.type!=='2차 활용') return;
-      const extra=(c.people||[]).filter(function(p){ return !inWeekly(p.handle); });
-      if(!extra.length) return;
-      const items=extra.map(function(p){
-        return {handle:p.handle,product:p.product||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'campaign',cid:c.id,pid:p.id}};
-      }).filter(function(x){return notHidden(x.src);});
+      if(_galleryCat==='릴스캠페인'&&c.type!=='릴스') return;
+      if(_galleryCat==='2차활용'&&c.type!=='2차 활용') return;
+      if(_galleryCat.indexOf('camp:')===0&&c.type!==_galleryCat.slice(5)) return;
+      const items=[];
+      (c.people||[]).forEach(function(p){
+        const urls=pickExtra(getPostUrls(p),[p.handle],scopeProj(p));
+        if(urls===null) return;
+        const it={handle:p.handle,product:prodStr(p)||'-',urls:urls,posted:urls.length>0,src:{type:'campaign',cid:c.id,pid:p.id}};
+        if(notHidden(it.src)) items.push(it);
+      });
       if(!items.length) return;
-      groups.push({key:'c-'+c.id,label:(c.type==='릴스'?'🎬 ':'♻️ ')+c.name+' '+c.round+'차',dateLabel:c.date,items:items});
+      const icon=c.type==='릴스'?'🎬 ':(c.type==='2차 활용'?'♻️ ':'📌 ');
+      groups.push({key:'c-'+c.id,label:icon+c.name+' '+c.round+'차',dateLabel:c.date,items:items});
     });
   }
 
-  // 3) zvzo/브랜더진 협업 인원 중 주간 리스트에 없는 사람들
-  if(_galleryCat!=='⭐즐겨찾기'&&_galleryCat!=='릴스캠페인'&&_galleryCat!=='2차활용'){
+  // 3) zvzo/브랜더진 협업 인원
+  if(_galleryCat!=='⭐즐겨찾기'&&_galleryCat!=='릴스캠페인'&&_galleryCat!=='2차활용'&&_galleryCat.indexOf('camp:')!==0){
     ['zvzo','브랜더진'].forEach(function(brand){
       if(_galleryCat!=='전체'&&_galleryCat!==brand) return;
-      const extra=(DB.collabs||[]).filter(function(item){ return item.brand===brand&&!inWeekly(item.handle)&&!inWeekly(item.name); });
-      if(!extra.length) return;
-      const items=extra.map(function(item){
-        return {handle:item.name+(item.handle?' ('+item.handle+')':''),product:item.product||'-',urls:getPostUrls(item),posted:getPostUrls(item).length>0,src:{type:'collab',id:item.id}};
-      }).filter(function(x){return notHidden(x.src);});
+      const items=[];
+      (DB.collabs||[]).filter(function(item){ return item.brand===brand; }).forEach(function(item){
+        const urls=pickExtra(getPostUrls(item),[item.handle,item.name],collabScope(item));
+        if(urls===null) return;
+        const it={handle:item.name+(item.handle?' ('+item.handle+')':''),product:prodStr(item)||'-',urls:urls,posted:urls.length>0,src:{type:'collab',id:item.id}};
+        if(notHidden(it.src)) items.push(it);
+      });
       if(!items.length) return;
       groups.push({key:'collab-'+brand,label:(brand==='zvzo'?'🔗 ':'🏷 ')+brand+' 협업',dateLabel:'',items:items});
     });
@@ -1844,7 +2104,7 @@ function pgExposureGallery(){
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
     ${catList.map(function(cat){
       const on=_galleryCat===cat;
-      return `<button onclick="setGalleryCat('${cat}')" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
+      return `<button data-cat="${e(cat)}" onclick="setGalleryCat(this.dataset.cat)" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on?'#1D4E3A':'#e0e0e0'};background:${on?'#1D4E3A':'#fff'};color:${on?'#fff':'#555'};font-family:inherit">${catLabel[cat]}</button>`;
     }).join('')}
   </div>
   <div id="galleryResultsWrap"></div>`;
@@ -2205,7 +2465,7 @@ function saveExpContent(repId){
 // ══════════════════════════════
 //  MODALS
 // ══════════════════════════════
-const om=html=>{document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('open');};
+const om=html=>{const m=document.getElementById('modal');m.classList.remove('wide');m.innerHTML=html;document.getElementById('ov').classList.add('open');};
 const cm=()=>document.getElementById('ov').classList.remove('open');
 document.getElementById('ov').addEventListener('click',ev=>{if(ev.target===document.getElementById('ov')&&!_isDragging)cm();});
 
@@ -2214,11 +2474,11 @@ function openQuickSend(wid,pid){
   const w=DB.weekly.find(x=>x.id===wid); const p=w&&w.people.find(x=>x.id===pid);
   if(!p) return;
   const curProj=w.project||'기본';
-  const otherProj=curProj==='백팩'?'기본':'백팩';
+  const others=getProjects().filter(x=>x.key!==curProj);
   om(`<div class="mh"><h3>📤 ${e(p.handle)} 다른 시딩으로 복사</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
-    <p style="font-size:12px;color:#888;margin-bottom:14px">원본(${curProj==='백팩'?'🎒 백팩':'탱글'} 시딩)은 그대로 두고, 복사본이 새로 만들어져요. 배송완료/게시물 링크는 새로 초기화돼요.</p>
-    <button class="btn pri" style="width:100%;margin-bottom:8px;padding:12px;font-size:14px" data-wid="${wid}" data-pid="${pid}" data-proj="${otherProj}" onclick="quickSendExecute(this.dataset.wid,this.dataset.pid,this.dataset.proj)">${otherProj==='백팩'?'🎒 백팩 시딩':'탱글 시딩'} 최신 차수로 복사</button>
+    <p style="font-size:12px;color:#888;margin-bottom:14px">원본(${e(projLabel(curProj))})은 그대로 두고, 복사본이 새로 만들어져요. 배송완료/게시물 링크는 새로 초기화되고, <b>캠페인·협업 딱지는 시딩 종류별로 따로 관리돼서 복사본은 딱지 없이 새로 시작</b>해요.</p>
+    ${others.map(o=>`<button class="btn pri" style="width:100%;margin-bottom:8px;padding:12px;font-size:14px" data-wid="${wid}" data-pid="${pid}" data-proj="${e(o.key)}" onclick="quickSendExecute(this.dataset.wid,this.dataset.pid,this.dataset.proj)">${e(projLabel(o.key))} 최신 차수로 복사</button>`).join('')}
     <button class="btn" style="width:100%" data-wid="${wid}" data-pid="${pid}" onclick="cm();openSendToRound(this.dataset.wid,this.dataset.pid)">다른 차수 직접 선택...</button>
   </div>`);
 }
@@ -2231,23 +2491,23 @@ function quickSendExecute(wid,pid,targetProject){
     target={id:'w'+uid(),round,date:today(),project:targetProject,people:[]};
     DB.weekly.push(target);
   }
-  target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[]});
+  target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[],...(((w.project||'기본')!==(target.project||'기본'))?{collabTags:[]}:{})});
   save();cm();
-  toast(`${p.handle} → ${targetProject==='백팩'?'🎒 백팩':'탱글'} 시딩으로 복사됨`);
+  toast(`${p.handle} → ${projLabel(targetProject)}로 복사됨`);
   renderSB();renderPage();
 }
 function openSendToRound(wid,pid){
   const w=DB.weekly.find(x=>x.id===wid); const p=w&&w.people.find(x=>x.id===pid);
   if(!p) return;
   const targets=[...DB.weekly].filter(x=>x.id!==wid).sort((a,b)=>b.date.localeCompare(a.date));
-  const optHtml=targets.map(t=>`<option value="${t.id}">${(t.project==='백팩'?'🎒 백팩 ':'기본 ')}${getMonthRound(t.id).replace('🎒 ','')} (${t.date})</option>`).join('');
+  const optHtml=targets.map(t=>`<option value="${t.id}">${e(projLabel(t.project||'기본'))} ${getMonthRoundPlain(t.id)} (${t.date})</option>`).join('');
   om(`<div class="mh"><h3>📤 ${e(p.handle)} 차수 선택해서 복사</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
     <div class="fr"><label>복사할 차수</label>
       <select id="qsTarget" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit">${optHtml}<option value="__new__">+ 새 차수 만들기</option></select>
     </div>
     <div class="fg" id="qsNewWrap" style="display:none">
-      <div class="fr"><label>프로젝트</label><select id="qsNewProject"><option value="기본">탱글 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>
+      <div class="fr"><label>프로젝트</label><select id="qsNewProject">${projOptionsHtml('기본')}</select></div>
       <div class="fr"><label>날짜</label><input id="qsNewDate" type="date" value="${today()}"></div>
     </div>
   </div>
@@ -2269,14 +2529,14 @@ function executeSendToRound(wid,pid){
   } else {
     target=DB.weekly.find(x=>x.id===targetId);
   }
-  target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[]});
+  target.people.push({...p,id:'p'+uid(),shipped:false,postUrls:[],...(((w.project||'기본')!==(target.project||'기본'))?{collabTags:[]}:{})});
   save();cm();
-  toast(`${p.handle} → ${(target.project==='백팩'?'🎒 백팩':'탱글')} ${target.round}차로 복사됨`);
+  toast(`${p.handle} → ${projLabel(target.project||'기본')} ${target.round}차로 복사됨`);
   renderSB();renderPage();
 }
 function openImportP(targetWid){
   const rounds=[...DB.weekly].filter(w=>w.id!==targetWid&&w.people.length>0).sort((a,b)=>b.date.localeCompare(a.date));
-  const optHtml=rounds.map(w=>`<option value="${w.id}">${(w.project==='백팩'?'🎒 백팩 ':'기본 ')}${getMonthRound(w.id).replace('🎒 ','')} (${w.date}) · ${w.people.length}명</option>`).join('');
+  const optHtml=rounds.map(w=>`<option value="${w.id}">${e(projLabel(w.project||'기본'))} ${getMonthRoundPlain(w.id)} (${w.date}) · ${w.people.length}명</option>`).join('');
   om(`<div class="mh"><h3>📥 기존 인원 가져오기</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
     <div class="fr"><label>어느 차수에서 가져올까요?</label>
@@ -2347,16 +2607,17 @@ function applyImportP(targetWid){
   toast(`${count}명 가져왔어요 (배송/게시 상태는 초기화됨)`);
 }
 function openAddW(){
+  ensureWeeklyProject();
   const next=nextRoundForProject(_weeklyProject);
   om(`<div class="mh"><h3>새 주간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb"><div class="fg">
-    <div class="fr"><label>프로젝트</label><select id="f3" onchange="document.getElementById('f1').value=nextRoundForProject(this.value)">
-      <option value="기본"${_weeklyProject==='기본'?' selected':''}>탱글 시딩</option>
-      <option value="백팩"${_weeklyProject==='백팩'?' selected':''}>🎒 백팩 시딩</option>
+    <div class="fr"><label>시딩 종류</label><select id="f3" onchange="document.getElementById('f1').value=nextRoundForProject(this.value)">
+      ${projOptionsHtml(_weeklyProject)}
     </select></div>
     <div class="fr"><label>차수</label><input id="f1" type="number" value="${next}" min="1"></div>
   </div>
   <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
+  <div style="font-size:11px;color:#aaa;margin-top:6px">원하는 시딩 종류가 없으면 닫고 왼쪽 <b>＋ 시딩 종류 추가·관리</b>에서 먼저 만들어주세요.</div>
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddW()">추가</button></div>`);
 }
@@ -2364,7 +2625,7 @@ function nextRoundForProject(project){
   const same=DB.weekly.filter(w=>(w.project||'기본')===project);
   return same.length?Math.max(...same.map(w=>w.round))+1:1;
 }
-function saveAddW(){const round=parseInt(g('f1'))||1,date=g('f2'),project=g('f3')||'기본',id='w'+uid();DB.weekly.push({id,round,date,project,people:[]});_weeklyProject=project;save();selW(id);cm();toast(`${project==='백팩'?'🎒 백팩 ':''}${round}차 추가됨`);}
+function saveAddW(){const round=parseInt(g('f1'))||1,date=g('f2'),project=g('f3')||'기본',id='w'+uid();DB.weekly.push({id,round,date,project,people:[]});_weeklyProject=project;save();selW(id);cm();toast(`${project==='기본'?'':projLabel(project)+' '}${round}차 추가됨`);}
 
 // 인원 추가
 function openAddP(wid){
@@ -2407,10 +2668,10 @@ function openMoveP(wid){
       +'<div style="color:#888">'+((p.products||[]).join(', ')||'-')+'</div>'
       +'</div>';
   }).join('');
-  var _moveOpts=targets.length?targets.map(function(t){return '<option value="'+t.id+'">'+(t.project==='백팩'?'🎒 백팩 ':'기본 ')+getMonthRound(t.id).replace('🎒 ','')+' ('+t.date+')</option>';}).join(''):'';
+  var _moveOpts=targets.length?targets.map(function(t){return '<option value="'+t.id+'">'+e(projLabel(t.project||'기본'))+' '+getMonthRoundPlain(t.id)+' ('+t.date+')</option>';}).join(''):'';
   om('<div class="mh"><h3>차수 이동</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
-    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요. (탱글 시딩 ↔ 백팩 시딩 사이에도 이동 가능해요)</p>'
+    +'<p style="font-size:12px;color:#888;margin-bottom:12px">이동할 인원을 선택하고 이동할 차수를 골라주세요. (다른 시딩 종류 사이에도 이동 가능해요)</p>'
     +'<div style="border:1px solid #e8e8e8;border-radius:8px;overflow:hidden;margin-bottom:14px">'
     +'<div style="background:#f9f9f9;padding:6px 12px;font-size:11px;font-weight:700;color:#888;display:grid;grid-template-columns:24px 1fr 1fr;gap:8px">'
     +'<div><input type="checkbox" id="move-chk-all" onchange="toggleAllMove(this)"></div>'
@@ -2424,7 +2685,7 @@ function openMoveP(wid){
     +'</select></div>'
     +'<div class="fr" id="move-new-date" style="display:none">'
     +'<div class="fg">'
-    +'<div class="fr"><label>새 차수 프로젝트</label><select id="move-new-project"><option value="기본">탱글 시딩</option><option value="백팩">🎒 백팩 시딩</option></select></div>'
+    +'<div class="fr"><label>새 차수 프로젝트</label><select id="move-new-project">'+projOptionsHtml('기본')+'</select></div>'
     +'<div class="fr"><label>새 차수 날짜</label><input type="date" id="move-new-date-input" value="'+today()+'"></div>'
     +'</div>'
     +'</div>'
@@ -2458,13 +2719,22 @@ function executeMoveP(wid){
     target=DB.weekly.find(x=>x.id===targetId);
   }
   // 이동
-  people.forEach(p=>target.people.push({...p,id:'p'+uid()}));
+  const crossProj=(w.project||'기본')!==(target.project||'기본');
+  people.forEach(p=>target.people.push({...p,id:'p'+uid(),...(crossProj?{collabTags:[]}:{})}));
   w.people=w.people.filter(p=>!selected.includes(p.id));
   save();renderSB();renderPage();cm();
-  toast(`${selected.length}명 → ${(target.project==='백팩'?'🎒 백팩 ':'')}${target.round}차로 이동됨`);
+  toast(`${selected.length}명 → ${(target.project&&target.project!=='기본')?projLabel(target.project)+' ':''}${target.round}차로 이동됨`);
 }
 function addProdField(){const list=document.getElementById('prod-list');const idx=list.querySelectorAll('.prod-row').length+1;const row=document.createElement('div');row.className='fg prod-row';row.innerHTML=`<div class="fr" style="flex:1"><label>제품 ${idx}</label><input class="prod-input" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button>`;list.appendChild(row);}
 function getProducts(){return [...document.querySelectorAll('.prod-input')].map(x=>x.value.trim()).filter(Boolean);}
+// 제품 여러 개: products 배열이 있으면 그걸, 없으면(예전 데이터) product 한 칸을 사용
+function prodList(p){ if(!p) return []; if(Array.isArray(p.products)&&p.products.length) return p.products.filter(Boolean); return p.product?[String(p.product)]:[]; }
+function prodStr(p){ return prodList(p).join(' / '); }
+function prodFields(){ const a=getProducts(); return {products:a,product:a.join(' / ')}; }
+function prodFieldsHtml(list){
+  const arr=(list&&list.length)?list:[''];
+  return `<div class="sec">제품 <span style="font-weight:400;color:#aaa;font-size:10px">(여러 개면 + 제품 추가)</span></div><div id="prod-list">${arr.map((prd,i)=>`<div class="fg prod-row"><div class="fr" style="flex:1"><label>제품 ${i+1}</label><input class="prod-input" value="${e(prd)}" placeholder="제품명"></div><button type="button" class="btn sm" onclick="this.closest('.prod-row').remove()" style="margin-top:18px;color:#e00">✕</button></div>`).join('')}</div><button type="button" class="btn sm" onclick="addProdField()" style="margin-top:4px">+ 제품 추가</button>`;
+}
 function saveAddP(wid){const w=DB.weekly.find(x=>x.id===wid),handle=g('fh');if(!handle){alert('활동명 필수');return;}w.people.push({id:'p'+uid(),handle,realname:g('frn'),url:g('fu'),followers:parseInt(g('ff'))||0,products:getProducts(),contact:g('fc'),phone:g('fph'),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),type:g('ft'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 // 인원 수정
@@ -2489,151 +2759,320 @@ function openEditP(wid,pid){
 }
 function saveEditP(wid,pid){const p=DB.weekly.find(x=>x.id===wid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.realname=g('frn');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.products=getProducts();p.contact=g('fc');p.phone=g('fph');p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.type=g('ft');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
-// 붙여넣기 입력
-let _parsed=[];
-function openPaste(wid){
-  const w=DB.weekly.find(x=>x.id===wid);
-  om(`<div class="mh"><h3>📋 붙여넣기 입력 — ${w.round}차</h3><button class="btn ico" onclick="cm()">✕</button></div>
-  <div class="mb">
-    <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.7">탭으로 구분된 형식으로 붙여넣으세요:<br>
-    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">활동명</code>
-    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">URL</code>
-    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">팔로워</code>
-    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">제품</code>
-    <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">연락처</code></p>
-    <textarea id="paste-input" style="width:100%;height:130px;padding:10px 12px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;resize:vertical"
-      placeholder="-민하 (blossomh_)&#9;https://www.instagram.com/blossomh_/&#9;226,000&#9;Glossy Mid Tangle Twist Bag_Ivory&#9;DM" oninput="previewPaste()"></textarea>
-    <div id="paste-preview"></div>
-  </div>
-  <div class="mf">
-    <span id="paste-count" style="font-size:12px;color:#888;margin-right:auto;align-self:center"></span>
-    <button class="btn" onclick="cm()">취소</button>
-    <button class="btn pri" id="paste-save-btn" onclick="savePaste('${wid}')" disabled>저장</button>
-  </div>`);
-}
-function previewPaste(){
-  const raw=document.getElementById('paste-input').value.trim();
-  const preview=document.getElementById('paste-preview');
-  const countEl=document.getElementById('paste-count');
-  const saveBtn=document.getElementById('paste-save-btn');
-  if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsed=[];return;}
-  // 탭이 있는 줄 기준으로 행 분리 (셀 안의 줄바꿈 처리)
-  // 엑셀 복사 형식 파싱: 따옴표로 감싸진 셀 내 줄바꿈 처리
-  const rows = [];
-  // 따옴표 안의 줄바꿈을 공백으로 치환 후 행 분리
-  const normalized = raw.replace(/"([^"]*)"/g, (match, p1) => '"' + p1.replace(/\n/g, ' ').replace(/\t/g, ' ') + '"');
-  normalized.split('\n').forEach(line => {
-    if (!line.trim()) return;
-    // 따옴표 제거
-    const cleaned = line.replace(/"([^"]*)"/g, (m, p1) => p1.trim());
-    rows.push(cleaned);
-  });
-  _parsed=[];
-  let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
-    <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
-      <div style="padding:6px 10px">활동명</div><div style="padding:6px 10px">URL</div><div style="padding:6px 10px">팔로워</div><div style="padding:6px 10px">제품</div><div style="padding:6px 10px">연락처</div>
-    </div>`;
-  rows.forEach((line,i)=>{
-    let cols=line.split('\t');
-    if(cols.length<2) cols=line.split(/\s{2,}/);
-    const handle=(cols[0]||'').trim().replace(/\s+/g,' '),url=(cols[1]||'').trim();
-    const followers=parseInt((cols[2]||'').replace(/[,\s]/g,''))||0;
-    const product=(cols[3]||'').trim(),contact=(cols[4]||'').trim();
-    const address=(cols[5]||'').trim(),note=(cols[6]||'').trim();
-    _parsed.push({handle,url,followers,products:product?[product]:[],contact,address,type:'시딩',note});
-    const inp=(id,val,ph='')=>`<input data-row="${i}" data-field="${id}" value="${val.replace(/"/g,'&quot;')}" placeholder="${ph}" style="width:100%;border:none;border-radius:4px;padding:4px 6px;font-size:11px;font-family:inherit;background:transparent" oninput="updateParsed(${i},'${id}',this.value)" onfocus="this.style.background='#f0faf4'" onblur="this.style.background='transparent'">`;
-    html+=`<div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;border-top:1px solid #e8e8e8;align-items:center">
-      <div style="padding:4px 6px">${inp('handle',handle,'활동명')}</div>
-      <div style="padding:4px 6px">${inp('url',url,'URL')}</div>
-      <div style="padding:4px 6px">${inp('followers',followers?String(followers):'','팔로워')}</div>
-      <div style="padding:4px 6px">${inp('product',product,'제품')}</div>
-      <div style="padding:4px 6px">${inp('contact',contact,'연락처')}</div>
-    </div>`;
-  });
-  html+='</div>';
-  preview.innerHTML=html;
-  countEl.textContent=`${_parsed.length}명 인식됨`;
-  saveBtn.disabled=_parsed.length===0;
-}
-function updateParsed(i,field,val){
-  if(!_parsed[i]) return;
-  if(field==='followers') _parsed[i].followers=parseInt(val.replace(/[,\s]/g,''))||0;
-  else if(field==='product') _parsed[i].products=val.trim()?[val.trim()]:[];
-  else _parsed[i][field]=val.trim();
-}
-function savePaste(wid){
-  const w=DB.weekly.find(x=>x.id===wid);if(!w||!_parsed.length)return;
-  _parsed.forEach(px=>w.people.push({id:'p'+uid(),...px}));
-  save();renderSB();renderPage();cm();toast(`${_parsed.length}명 추가됨`);_parsed=[];
+// ══════════════════════════════
+//  붙여넣기 (열 지정 방식) — 주간 리스트 / 캠페인 공용
+//  엑셀·구글시트에서 복사한 표를 붙여넣으면, 열마다 "이게 이름 / 이게 제품 / 이게 주소"를 고르는 칸이 나옵니다.
+// ══════════════════════════════
+const PM_FIELDS={
+  weekly:[
+    {k:'handle',l:'활동명(핸들)',req:true},{k:'realname',l:'실명'},{k:'url',l:'채널 URL'},{k:'followers',l:'팔로워'},
+    {k:'product',l:'제품',multi:true},{k:'contact',l:'컨택 포인트'},{k:'phone',l:'전화번호'},{k:'address',l:'배송지 주소'},
+    {k:'type',l:'진행 유형'},{k:'postUrls',l:'게시물 URL'},{k:'note',l:'비고',multi:true}
+  ],
+  campaign:[
+    {k:'handle',l:'활동명(핸들)',req:true},{k:'url',l:'채널 URL'},{k:'followers',l:'팔로워'},{k:'product',l:'제품',multi:true},
+    {k:'contact',l:'컨택 포인트'},{k:'address',l:'배송지'},{k:'sendDate',l:'발송일'},{k:'uploadDate',l:'업로드일'},
+    {k:'fee',l:'단가'},{k:'postUrls',l:'게시물 URL'},{k:'note',l:'비고',multi:true}
+  ]
+};
+let _pm=null;
+function openPaste(wid){ openPasteMap('weekly',wid); }
+function openPasteCP(cid){ openPasteMap('campaign',cid); }
+
+function pmColName(c){ let s='',n=c+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
+
+// 탭으로 구분된 표 파싱 (따옴표로 감싼 셀 안의 줄바꿈 처리 — 구글시트/엑셀 복사 형식)
+function pmParseGrid(raw){
+  const text=String(raw).replace(/^\uFEFF/,'');
+  const rows=[]; let row=[],cell='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; }
+      else cell+=ch;
+    }else if(ch==='"'&&cell===''){ q=true; }
+    else if(ch==='\t'){ row.push(cell); cell=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cell); cell=''; rows.push(row); row=[]; }
+    else cell+=ch;
+  }
+  row.push(cell); rows.push(row);
+  let grid=rows.filter(function(r){ return r.some(function(c){ return String(c).trim()!==''; }); });
+  // 탭이 하나도 없고 공백 2칸 이상으로 구분된 경우
+  if(grid.length&&grid.every(function(r){ return r.length===1; })){
+    const alt=text.split(/\r?\n/).filter(function(l){ return l.trim(); }).map(function(l){ return l.trim().split(/\s{2,}/); });
+    if(alt.some(function(r){ return r.length>1; })) grid=alt;
+  }
+  let ncol=1; grid.forEach(function(r){ if(r.length>ncol) ncol=r.length; });
+  grid.forEach(function(r){ while(r.length<ncol) r.push(''); });
+  return grid;
 }
 
-let _parsedC=[];
-function openPasteCP(cid){
-  const c=DB.campaigns.find(x=>x.id===cid);
-  om(`<div class="mh"><h3>${c.name} ${c.round}차 — 붙여넣기</h3><button class="btn ico" onclick="cm()">✕</button></div>
+// 제목 줄 글자로 열 종류 추정
+function pmGuessHeader(kind,h){
+  const t=String(h||'').replace(/\s+/g,'').toLowerCase();
+  if(!t) return '';
+  const rules=[
+    ['',/캡처|캡쳐|스크린|screenshot|답장|조회수|좋아요|댓글/],
+    ['postUrls',/결과물|게시물|포스팅|포스트|post|업로드링크|콘텐츠링크/],
+    ['realname',/실명|성함|수령인|받는분|받는사람|수취인/],
+    ['phone',/전화|휴대폰|핸드폰|폰번|mobile|tel/],
+    ['contact',/컨택|연락|contact|이메일|메일|email|^dm/],
+    ['address',/배송|주소|address|수령지|도로명/],
+    ['followers',/팔로워|구독자|follower|팔로우/],
+    ['handle',/활동명|아이디|^id$|닉네임|계정명|handle|이름|^name$|^ig$/],
+    ['url',/채널|계정|프로필|url|링크|인스타|instagram/],
+    ['product',/제품|상품|product|제안|품목/],
+    ['sendDate',/발송일|출고|배송일|보낸날/],
+    ['uploadDate',/업로드일|게시일|업로드날/],
+    ['fee',/단가|비용|금액|fee|원가|가격/],
+    ['type',/진행유형|유형|타입|type|구분/],
+    ['note',/비고|메모|특이|이력|note|코멘트|참고/]
+  ];
+  for(let i=0;i<rules.length;i++){
+    if(rules[i][1].test(t)){
+      const k=rules[i][0];
+      if(!k) return '';
+      return PM_FIELDS[kind].some(function(f){ return f.k===k; })?k:'';
+    }
+  }
+  return '';
+}
+// 내용(값 모양)으로 열 종류 추정
+function pmGuessContent(kind,vals,can){
+  if(!vals.length) return '';
+  const n=vals.length;
+  const frac=function(fn){ return vals.filter(fn).length/n; };
+  const isPostUrl=function(v){ return /instagram\.com\/(p|reel|reels|tv)\/|youtube\.com\/(watch|shorts)|youtu\.be\//i.test(v); };
+  const isUrl=function(v){ return /(instagram\.com|youtube\.com|youtu\.be)/i.test(v)||/^https?:\/\//i.test(v); };
+  if(frac(isPostUrl)>=0.6&&can('postUrls')) return 'postUrls';
+  if(frac(isUrl)>=0.6&&can('url')) return 'url';
+  if(frac(function(v){ return /^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(v.replace(/\s/g,'')); })>=0.6&&can('phone')) return 'phone';
+  if(frac(function(v){ return /^[\d,.]+\s*(만|천|k|m)?$/i.test(v)&&v.replace(/\D/g,'').length>=3; })>=0.6&&can('followers')) return 'followers';
+  if(frac(function(v){ return /@[\w-]+\.[\w.]+/.test(v)||/^(dm|디엠)/i.test(v); })>=0.5&&can('contact')) return 'contact';
+  if(frac(function(v){ return /^\d{4}[-./]\d{1,2}[-./]\d{1,2}$|^\d{1,2}[./]\d{1,2}$/.test(v); })>=0.6){
+    if(can('sendDate')) return 'sendDate';
+    if(can('uploadDate')) return 'uploadDate';
+  }
+  if(frac(function(v){ return v.length>=8&&(/[시도]\s.*[구군시]|[로길]\s?\d|\d+동\s*\d+호|\d{5}/.test(v)); })>=0.5&&can('address')) return 'address';
+  if(frac(function(v){ return /bag|백|tangle|twist|glossy|mini|small|backpack|feather|페더/i.test(v); })>=0.5&&can('product')) return 'product';
+  if(frac(function(v){ return /^(피드|릴스|유튜브|시딩|단순\s*선물|기타)/.test(v); })>=0.6&&can('type')) return 'type';
+  return '';
+}
+function pmGuessAll(kind,head,rows,ncol){
+  const map=new Array(ncol).fill('');
+  const used=new Set();
+  const multi=new Set(PM_FIELDS[kind].filter(function(f){ return f.multi; }).map(function(f){ return f.k; }));
+  const has=function(k){ return PM_FIELDS[kind].some(function(f){ return f.k===k; }); };
+  const can=function(k){ return has(k)&&(multi.has(k)||!used.has(k)); };
+  if(head){
+    for(let c=0;c<ncol;c++){
+      const k=pmGuessHeader(kind,head[c]);
+      if(k&&can(k)){ map[c]=k; used.add(k); }
+    }
+  }
+  for(let c=0;c<ncol;c++){
+    if(map[c]) continue;
+    const vals=rows.map(function(r){ return String(r[c]||'').trim(); }).filter(Boolean).slice(0,12);
+    const k=pmGuessContent(kind,vals,can);
+    if(k&&can(k)){ map[c]=k; used.add(k); }
+  }
+  if(!used.has('handle')){
+    const c=map.findIndex(function(m,i){ return !m&&rows.some(function(r){ return String(r[i]||'').trim(); }); });
+    if(c>=0) map[c]='handle';
+  }
+  return map;
+}
+
+function pmFollowers(v){
+  const sNum=String(v).replace(/,/g,'').trim();
+  const m=sNum.match(/^([\d.]+)\s*(만|천|k|m)?/i);
+  if(!m) return 0;
+  const n=parseFloat(m[1]); if(isNaN(n)) return 0;
+  const u=(m[2]||'').toLowerCase();
+  const mult=u==='만'?10000:(u==='천'||u==='k')?1000:u==='m'?1000000:1;
+  return Math.round(n*mult);
+}
+function pmUrl(raw){
+  if(/^https?:\/\//i.test(raw)) return raw;
+  if(/^(www\.)?(instagram|youtube)\.com/i.test(raw)) return 'https://'+raw;
+  const h=raw.replace(/^@/,'');
+  if(/^[\w.]+$/.test(h)) return 'https://www.instagram.com/'+h+'/';
+  return raw;
+}
+function pmExtractUrls(raw){
+  const found=String(raw).match(/(?:https?:\/\/)?(?:www\.|m\.)?(?:instagram\.com|youtube\.com|youtu\.be)\/[^\s,"']+/gi)||[];
+  return found.map(function(u){ u=u.replace(/[)\].,;]+$/,''); return /^https?:\/\//i.test(u)?u:'https://'+u; });
+}
+function pmDate(v){
+  v=String(v||'').trim();
+  let m=v.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+  if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  m=v.match(/^(\d{1,2})[./](\d{1,2})$/);
+  if(m) return new Date().getFullYear()+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');
+  return '';
+}
+const pmOne=function(v){ return String(v).replace(/\s*[\r\n]+\s*/g,' ').replace(/\s+/g,' ').trim(); };
+// 한 행 → 사람 정보 (지정된 열 기준)
+function pmBuild(row){
+  const o={products:[],postUrls:[]}; const notes=[];
+  _pm.map.forEach(function(k,c){
+    if(!k) return;
+    const raw=String(row[c]==null?'':row[c]).trim(); if(!raw) return;
+    switch(k){
+      case 'handle': if(!o.handle) o.handle=pmOne(raw).replace(/\s+\(/g,'('); break;
+      case 'realname': case 'contact': case 'phone': case 'type': case 'fee': case 'address':
+        if(!o[k]) o[k]=pmOne(raw); break;
+      case 'url': if(!o.url) o.url=pmUrl(pmOne(raw)); break;
+      case 'followers': if(!o.followers) o.followers=pmFollowers(raw); break;
+      case 'product': raw.split(/[\r\n]+/).map(function(x){ return x.trim(); }).filter(Boolean).forEach(function(x){ o.products.push(x); }); break;
+      case 'postUrls': pmExtractUrls(raw).forEach(function(u){ if(o.postUrls.indexOf(u)<0) o.postUrls.push(u); }); break;
+      case 'sendDate': case 'uploadDate': if(!o[k]) o[k]=pmDate(raw); break;
+      case 'note': notes.push(pmOne(raw)); break;
+    }
+  });
+  if(notes.length) o.note=notes.join(' / ');
+  return o;
+}
+function pmTarget(){ return _pm.kind==='weekly'?DB.weekly.find(function(x){ return x.id===_pm.id; }):DB.campaigns.find(function(x){ return x.id===_pm.id; }); }
+function pmExistingHandles(){ const t=pmTarget(); return new Set(((t&&t.people)||[]).map(function(p){ return normH(p.handle); })); }
+function pmResetInc(){
+  const ex=pmExistingHandles(); const seen=new Set();
+  _pm.inc=_pm.rows.map(function(r){
+    const h=pmBuild(r).handle; if(!h) return false;
+    const k=normH(h);
+    const dup=ex.has(k)||seen.has(k); seen.add(k);
+    return !dup;
+  });
+}
+
+function openPasteMap(kind,id){
+  const t=kind==='weekly'?DB.weekly.find(function(x){ return x.id===id; }):DB.campaigns.find(function(x){ return x.id===id; });
+  if(!t) return;
+  const title=kind==='weekly'?(projLabel(t.project||'기본')+' '+getMonthRoundPlain(id)):(t.name+' '+t.round+'차');
+  _pm={kind:kind,id:id,grid:[],head:null,rows:[],map:[],inc:[],hasHeader:false};
+  om(`<div class="mh"><h3>📋 붙여넣기 — ${e(title)}</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
-    <p style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.7">엑셀에서 복사한 내용을 붙여넣으세요:<br>
-    <b>활동명 · URL · 팔로워 · 제품 · 연락처 · 주소</b> 순서 (탭 구분)</p>
-    <textarea id="paste-input-c" style="width:100%;height:130px;padding:10px 12px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;resize:vertical"
-      oninput="parsePasteC()" placeholder="엑셀에서 복사 후 붙여넣기"></textarea>
-    <div id="paste-preview-c"></div>
+    <div style="font-size:12px;color:#666;line-height:1.75;margin-bottom:8px;background:#f7fdfa;border:1px solid #d8f3dc;border-radius:8px;padding:10px 12px">
+      ① 엑셀/구글시트에서 사람들 표를 <b>복사(Ctrl+C)</b> → ② 아래 칸에 <b>붙여넣기(Ctrl+V)</b><br>
+      ③ 붙여넣으면 <b>열(A열, B열…)마다 "이 열은 어떤 정보인지" 고르는 칸</b>이 나와요. 자동으로 맞춰주지만, 틀리면 직접 바꿀 수 있어요.<br>
+      <span style="color:#888">예) A열=활동명 · B열=채널 URL · C열=팔로워 · D열=제품 · E열=배송지 &nbsp;/ 필요 없는 열은 "사용 안 함"</span>
+    </div>
+    <textarea id="pm-input" oninput="pmParse()" placeholder="여기에 붙여넣기 (Ctrl+V)" style="width:100%;height:96px;padding:10px 12px;border-radius:7px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit;resize:vertical"></textarea>
+    <div id="pm-body" style="margin-top:10px"></div>
   </div>
   <div class="mf">
-    <span id="paste-count-c" style="font-size:12px;color:#888;margin-right:auto;align-self:center"></span>
+    <span id="pm-count" style="font-size:12px;color:#888;margin-right:auto;align-self:center"></span>
     <button class="btn" onclick="cm()">취소</button>
-    <button class="btn pri" id="paste-save-btn-c" onclick="savePasteC('${cid}')" disabled>저장</button>
+    <button class="btn pri" id="pm-save" onclick="pmSave()" disabled>선택한 인원 추가</button>
   </div>`);
+  document.getElementById('modal').classList.add('wide');
+  setTimeout(function(){ const el=document.getElementById('pm-input'); if(el) el.focus(); },50);
 }
-function parsePasteC(){
-  const raw=document.getElementById('paste-input-c').value.trim();
-  const preview=document.getElementById('paste-preview-c');
-  const countEl=document.getElementById('paste-count-c');
-  const saveBtn=document.getElementById('paste-save-btn-c');
-  if(!raw){preview.innerHTML='';countEl.textContent='';saveBtn.disabled=true;_parsedC=[];return;}
-  const rows = [];
-  const normalized = raw.replace(/"([^"]*)"/g, (match, p1) => '"' + p1.replace(/\n/g, ' ').replace(/\t/g, ' ') + '"');
-  normalized.split('\n').forEach(line => {
-    if (!line.trim()) return;
-    const cleaned = line.replace(/"([^"]*)"/g, (m, p1) => p1.trim());
-    rows.push(cleaned);
+function pmParse(){
+  const raw=document.getElementById('pm-input').value;
+  if(!raw.trim()){ _pm.grid=[];_pm.head=null;_pm.rows=[];_pm.map=[];_pm.inc=[];pmRender();return; }
+  const grid=pmParseGrid(raw);
+  const hits=grid[0].filter(function(c){ return pmGuessHeader(_pm.kind,c); }).length;
+  _pm.hasHeader=grid.length>1&&hits>=2;
+  pmApplyGrid(grid);
+}
+function pmApplyGrid(grid){
+  _pm.grid=grid;
+  _pm.head=_pm.hasHeader?grid[0]:null;
+  _pm.rows=_pm.hasHeader?grid.slice(1):grid.slice();
+  _pm.map=pmGuessAll(_pm.kind,_pm.head,_pm.rows,grid[0].length);
+  pmResetInc();
+  pmRender();
+}
+function pmToggleHeader(ch){ _pm.hasHeader=ch; pmApplyGrid(_pm.grid); }
+function pmAuto(){ _pm.map=pmGuessAll(_pm.kind,_pm.head,_pm.rows,_pm.grid[0].length); pmResetInc(); pmRender(); }
+function pmSetMap(c,val){
+  const f=PM_FIELDS[_pm.kind].find(function(x){ return x.k===val; });
+  if(val&&!(f&&f.multi)){ _pm.map.forEach(function(k,i){ if(i!==c&&k===val) _pm.map[i]=''; }); } // 한 열에만 지정 가능 (제품/비고는 여러 열 가능)
+  _pm.map[c]=val;
+  pmResetInc(); pmRender();
+}
+function pmToggleRow(ri,ch){ _pm.inc[ri]=ch; pmRefreshStatus(); }
+function pmToggleAll(ch){ _pm.inc=_pm.inc.map(function(_,i){ return ch&&!!pmBuild(_pm.rows[i]).handle; }); pmRender(); }
+function pmCell(ri,c,v){ _pm.rows[ri][c]=v.replace(/\s*↵\s*/g,'\n'); pmRefreshStatus(); }
+
+function pmRefreshStatus(){
+  const ex=pmExistingHandles(); const seen=new Set(); let n=0;
+  _pm.rows.forEach(function(r,ri){
+    const h=pmBuild(r).handle; const el=document.getElementById('pm-st-'+ri); let st;
+    if(!h) st='<span style="color:#c0392b">⚠ 활동명 없음</span>';
+    else{
+      const k=normH(h); const dup=ex.has(k)||seen.has(k); seen.add(k);
+      st=dup?'<span style="color:#b7791f">이미 있음</span>':'<span style="color:#2f855a">✓</span>';
+    }
+    if(el) el.innerHTML=st;
+    if(_pm.inc[ri]&&h) n++;
   });
-  _parsedC=[];
-  let html=`<div style="margin-top:12px;border-radius:7px;overflow:hidden;border:1px solid #e8e8e8">
-    <div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;background:#f9f9f9;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em">
-      <div style="padding:6px 10px">활동명</div><div style="padding:6px 10px">URL</div><div style="padding:6px 10px">팔로워</div><div style="padding:6px 10px">제품</div><div style="padding:6px 10px">연락처</div>
-    </div>`;
-  rows.forEach((line,i)=>{
-    let cols=line.split('\t');
-    if(cols.length<2) cols=line.split(/\s{2,}/);
-    const handle=(cols[0]||'').trim().replace(/\s+/g,' '),url=(cols[1]||'').trim();
-    const followers=parseInt((cols[2]||'').replace(/[,\s]/g,''))||0;
-    const product=(cols[3]||'').trim(),contact=(cols[4]||'').trim();
-    const address=(cols[5]||'').trim(),note=(cols[6]||'').trim();
-    _parsedC.push({handle,url,followers,product,contact,address,note});
-    const inp=(id,val,ph='')=>`<input data-row="${i}" value="${val.replace(/"/g,'&quot;')}" placeholder="${ph}" style="width:100%;border:none;border-radius:4px;padding:4px 6px;font-size:11px;font-family:inherit;background:transparent" oninput="updateParsedC(${i},'${id}',this.value)" onfocus="this.style.background='#f0faf4'" onblur="this.style.background='transparent'">`;
-    html+=`<div style="display:grid;grid-template-columns:1.2fr 1.4fr .7fr 1.2fr .8fr;border-top:1px solid #e8e8e8;align-items:center">
-      <div style="padding:4px 6px">${inp('handle',handle,'활동명')}</div>
-      <div style="padding:4px 6px">${inp('url',url,'URL')}</div>
-      <div style="padding:4px 6px">${inp('followers',followers?String(followers):'','팔로워')}</div>
-      <div style="padding:4px 6px">${inp('product',product,'제품')}</div>
-      <div style="padding:4px 6px">${inp('contact',contact,'연락처')}</div>
-    </div>`;
+  const cnt=document.getElementById('pm-count'), btn=document.getElementById('pm-save');
+  if(cnt) cnt.textContent='선택 '+n+'명 / 전체 '+_pm.rows.length+'행';
+  if(btn){ btn.disabled=n===0; btn.textContent=n?('선택한 '+n+'명 추가'):'선택한 인원 추가'; }
+}
+function pmRender(){
+  const body=document.getElementById('pm-body'); if(!body) return;
+  if(!_pm.grid.length){ body.innerHTML=''; pmRefreshStatus(); return; }
+  const fields=PM_FIELDS[_pm.kind]; const ncol=_pm.grid[0].length;
+  // 요약: 어느 열이 무엇인지
+  const parts=fields.map(function(f){
+    const cols=_pm.map.map(function(k,c){ return k===f.k?pmColName(c):null; }).filter(Boolean);
+    if(cols.length) return '<span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 9px;border-radius:20px;background:#D1FAE5;color:#065F46;font-size:11px"><b>'+f.l+'</b> ← '+cols.join(', ')+'열</span>';
+    if(f.req) return '<span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 9px;border-radius:20px;background:#FEE2E2;color:#991B1B;font-size:11px">⚠ <b>'+f.l+'</b> 열을 지정해주세요</span>';
+    return '';
+  }).join('');
+  const unused=_pm.map.map(function(k,c){ return k?null:pmColName(c); }).filter(Boolean);
+  const opts=function(c){
+    return '<option value="">— 사용 안 함 —</option>'+fields.map(function(f){ return '<option value="'+f.k+'"'+(_pm.map[c]===f.k?' selected':'')+'>'+f.l+(f.req?' *':'')+'</option>'; }).join('');
+  };
+  let thead='<tr><th style="padding:6px;width:30px"><input type="checkbox" title="전체 선택/해제" onchange="pmToggleAll(this.checked)"></th><th style="padding:6px;width:74px;text-align:left;font-size:10px;color:#999">상태</th>';
+  for(let c=0;c<ncol;c++){
+    const on=!!_pm.map[c];
+    thead+='<th style="padding:6px 6px 5px;min-width:150px;text-align:left;vertical-align:top;border-left:1px solid #eee"><div style="font-size:10px;color:#999;margin-bottom:3px">열 '+pmColName(c)+'</div><select onchange="pmSetMap('+c+',this.value)" style="width:100%;padding:5px;font-size:11px;border-radius:6px;border:1.5px solid '+(on?'#52B788':'#ddd')+';background:'+(on?'#f0faf4':'#fafafa')+';font-weight:'+(on?700:400)+';font-family:inherit">'+opts(c)+'</select></th>';
+  }
+  thead+='</tr>';
+  if(_pm.head){
+    thead+='<tr style="background:#fafafa"><td></td><td style="padding:3px 6px;font-size:10px;color:#aaa">제목 줄</td>'+_pm.head.map(function(h){ return '<td style="padding:3px 6px;font-size:10px;color:#999;border-left:1px solid #eee">'+e(String(h).replace(/\s*[\r\n]+\s*/g,' '))+'</td>'; }).join('')+'</tr>';
+  }
+  const trs=_pm.rows.map(function(r,ri){
+    return '<tr style="border-top:1px solid #eee"><td style="padding:3px 6px;text-align:center"><input type="checkbox" '+(_pm.inc[ri]?'checked':'')+' onchange="pmToggleRow('+ri+',this.checked)"></td><td id="pm-st-'+ri+'" style="padding:3px 6px;white-space:nowrap;font-size:10px"></td>'+
+      r.map(function(v,c){
+        const shown=String(v).replace(/\s*[\r\n]+\s*/g,' ↵ ');
+        return '<td style="padding:2px 3px;border-left:1px solid #f3f3f3"><input value="'+e(shown)+'" oninput="pmCell('+ri+','+c+',this.value)" style="width:100%;border:1px solid transparent;border-radius:4px;padding:4px 5px;font-size:11px;font-family:inherit;background:transparent;'+(_pm.map[c]?'':'opacity:.4;')+'" onfocus="this.style.borderColor=\'#52B788\';this.style.background=\'#fff\'" onblur="this.style.borderColor=\'transparent\';this.style.background=\'transparent\'"></td>';
+      }).join('')+'</tr>';
+  }).join('');
+  body.innerHTML=
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">'+
+      '<label style="font-size:12px;cursor:pointer"><input type="checkbox" '+(_pm.hasHeader?'checked':'')+' onchange="pmToggleHeader(this.checked)"> 첫 줄은 <b>제목(머리글)</b>이에요</label>'+
+      '<button class="btn sm" onclick="pmAuto()">↻ 자동으로 다시 맞추기</button>'+
+    '</div>'+
+    '<div style="margin-bottom:8px;line-height:1.9">'+parts+(unused.length?'<span style="display:inline-block;margin:2px 4px;font-size:11px;color:#999">사용 안 함: '+unused.join(', ')+'열</span>':'')+'</div>'+
+    '<div style="overflow:auto;max-height:340px;border:1px solid #e8e8e8;border-radius:8px"><table style="border-collapse:collapse;font-size:11px;min-width:100%"><thead style="position:sticky;top:0;background:#fff;z-index:1">'+thead+'</thead><tbody>'+(trs||'<tr><td colspan="'+(ncol+2)+'" style="padding:14px;text-align:center;color:#aaa">데이터 행이 없어요 (첫 줄을 제목으로 체크하셨다면 해제해보세요)</td></tr>')+'</tbody></table></div>'+
+    '<div style="font-size:11px;color:#aaa;margin-top:6px">셀을 눌러 내용을 고칠 수 있어요. 체크 해제한 줄·"활동명 없음"·"이미 있음" 줄은 추가되지 않아요.</div>';
+  pmRefreshStatus();
+}
+function pmSave(){
+  const t=pmTarget(); if(!t||!_pm.rows.length) return;
+  const out=[]; let skip=0;
+  _pm.rows.forEach(function(row,ri){
+    if(!_pm.inc[ri]) return;
+    const o=pmBuild(row);
+    if(!o.handle){ skip++; return; }
+    if(_pm.kind==='weekly'){
+      out.push({id:'p'+uid(),handle:o.handle,realname:o.realname||'',url:o.url||'',followers:o.followers||0,products:o.products,contact:o.contact||'',phone:o.phone||'',address:o.address||'',type:o.type||'시딩',note:o.note||'',postUrls:o.postUrls,shipped:false});
+    }else{
+      out.push({id:'cp'+uid(),project:inferProject(o.handle),handle:o.handle,url:o.url||'',followers:o.followers||0,products:o.products,product:o.products.join(' / '),contact:o.contact||'',address:o.address||'',sendDate:o.sendDate||'',uploadDate:o.uploadDate||'',fee:o.fee||'',note:o.note||'',postUrls:o.postUrls});
+    }
   });
-  html+='</div>';
-  preview.innerHTML=html;
-  countEl.textContent=`${_parsedC.length}명 인식됨`;
-  saveBtn.disabled=_parsedC.length===0;
+  if(!out.length){ toast('추가할 인원이 없어요 (활동명 열이 지정됐는지 확인해주세요)'); return; }
+  out.forEach(function(p){ t.people.push(p); });
+  save(); renderSB(); renderPage(); cm();
+  toast(out.length+'명 추가됨'+(skip?' (활동명 없는 '+skip+'줄 제외)':''));
+  _pm=null;
 }
-function updateParsedC(i,field,val){
-  if(!_parsedC[i]) return;
-  if(field==='followers') _parsedC[i].followers=parseInt(val.replace(/[,\s]/g,''))||0;
-  else _parsedC[i][field]=val.trim();
-}
-function savePasteC(cid){
-  const c=DB.campaigns.find(x=>x.id===cid);if(!c||!_parsedC.length)return;
-  _parsedC.forEach(px=>c.people.push({id:'cp'+uid(),...px}));
-  save();renderSB();renderPage();cm();toast(`${_parsedC.length}명 추가됨`);_parsedC=[];
-}
+
 function openAddM(){
   om(`<div class="mh"><h3>새 월간 리스트</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb"><div class="fg">
@@ -2697,7 +3136,7 @@ function pgCollabTab(brand, subHtml){
     return '<tr>'
       +'<td><div style="font-weight:600">'+item.name+links+'</div>'+(item.handle?'<div style="font-size:11px;color:#888">@'+item.handle+'</div>':'')+'</td>'
       +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+ctBg+';color:'+ctColor+'">'+ct+'</span></td>'
-      +'<td style="font-size:12px">'+(item.product||'-')+'</td>'
+      +'<td style="font-size:12px">'+(e(prodStr(item))||'-')+'</td>'
       +'<td>'+item.startDate+'</td>'
       +'<td>'+item.endDate+'</td>'
       +'<td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:'+statusBg+';color:'+statusColor+'">'+statusText+' '+days+'일</span></td>'
@@ -2720,7 +3159,8 @@ function openAddCollab(brand){
   om('<div class="mh"><h3>'+brand+' 협업 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
-    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" placeholder="예: Glossy Mid Tangle Twist Bag_Mustard"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
+    +'<div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div>'
+    +prodFieldsHtml([])
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+d+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+d+'"></div></div>'
     +'<div class="fg"><div class="fr"><label>단가</label><input id="cl9" placeholder="30만원"></div><div class="fr"><label>비고</label><input id="cl6" placeholder="메모"></div></div>'
     +'<div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(여러 개면 줄바꿈)</span></label><textarea id="cl8" rows="2" placeholder="https://www.instagram.com/p/..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>'
@@ -2730,7 +3170,7 @@ function openAddCollab(brand){
 
 function saveAddCollab(brand){
   var name=g('cl1').trim();if(!name){alert('협업자 이름 필수');return;}
-  var item={id:'cl'+uid(),brand:brand,name:name,handle:g('cl2').trim(),product:g('cl3').trim(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),fee:g('cl9').trim(),postUrls:g('cl8').split('\n').map(s=>s.trim()).filter(Boolean),note:g('cl6').trim()};
+  var item={id:'cl'+uid(),project:inferProject(g('cl2').trim()||name),brand:brand,name:name,handle:g('cl2').trim(),...prodFields(),contentType:g('cl7')||collabTypeOpts(brand)[0],startDate:g('cl4'),endDate:g('cl5'),fee:g('cl9').trim(),postUrls:g('cl8').split('\n').map(s=>s.trim()).filter(Boolean),note:g('cl6').trim()};
   if(!DB.collabs) DB.collabs=[];
   DB.collabs.push(item);
   save();cm();toast(name+' 협업 추가됨');
@@ -2746,7 +3186,8 @@ function openEditCollab(id){
   om('<div class="mh"><h3>협업 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" value="'+e(item.name)+'"></div><div class="fr"><label>채널 아이디</label><input id="cl2" value="'+e(item.handle||'')+'"></div></div>'
-    +'<div class="fg"><div class="fr"><label>제품</label><input id="cl3" value="'+e(item.product||'')+'"></div><div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div></div>'
+    +'<div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div>'
+    +prodFieldsHtml(prodList(item))
     +'<div class="fg"><div class="fr"><label>시작일</label><input id="cl4" type="date" value="'+item.startDate+'"></div><div class="fr"><label>종료일</label><input id="cl5" type="date" value="'+item.endDate+'"></div></div>'
     +'<div class="fg"><div class="fr"><label>단가</label><input id="cl9" value="'+e(item.fee||'')+'"></div><div class="fr"><label>비고</label><input id="cl6" value="'+e(item.note||'')+'"></div></div>'
     +'<div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(여러 개면 줄바꿈)</span></label><textarea id="cl8" rows="2" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px">'+e(getPostUrls(item).join('\n'))+'</textarea></div>'
@@ -2756,7 +3197,7 @@ function openEditCollab(id){
 
 function saveEditCollab(id){
   var item=DB.collabs.find(function(x){return x.id===id;});if(!item)return;
-  item.name=g('cl1').trim();item.handle=g('cl2').trim();item.product=g('cl3').trim();item.contentType=g('cl7')||collabTypeOpts(item.brand)[0];
+  item.name=g('cl1').trim();item.handle=g('cl2').trim();Object.assign(item,prodFields());item.contentType=g('cl7')||collabTypeOpts(item.brand)[0];
   item.startDate=g('cl4');item.endDate=g('cl5');item.fee=g('cl9').trim();item.postUrls=g('cl8').split('\n').map(s=>s.trim()).filter(Boolean);delete item.postUrl;item.note=g('cl6').trim();
   save();cm();toast('수정됨');pgCampaign();
 }
@@ -2826,7 +3267,7 @@ function openAddCP(cid){
   <div class="mb">
     <div class="fg"><div class="fr"><label>활동명</label><input id="fh" placeholder="전지혜(zee.hye)"></div><div class="fr"><label>채널 URL</label><input id="fu" placeholder="https://..."></div></div>
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" placeholder="0"></div><div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div></div>
-    <div class="fr"><label>제품</label><input id="fp1" placeholder="제품명"></div>
+    ${prodFieldsHtml([])}
     <div class="fr"><label>배송지</label><input id="fa" placeholder="서울시..."></div>
     <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(인스타/유튜브, 여러 개면 줄바꿈)</span></label><textarea id="fpost" rows="2" placeholder="https://www.instagram.com/p/..." style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>
     <div class="fg">
@@ -2837,7 +3278,7 @@ function openAddCP(cid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCP('${cid}')">추가</button></div>`);
 }
-function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),product:g('fp1'),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),project:inferProject(handle),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),...prodFields(),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 function openEditCP(cid,pid){
   const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;
@@ -2846,7 +3287,7 @@ function openEditCP(cid,pid){
   <div class="mb">
     <div class="fg"><div class="fr"><label>활동명</label><input id="fh" value="${e(p.handle)}"></div><div class="fr"><label>채널 URL</label><input id="fu" value="${e(p.url)}"></div></div>
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div></div>
-    <div class="fr"><label>제품</label><input id="fp1" value="${e(p.product)}"></div>
+    ${prodFieldsHtml(prodList(p))}
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
     <div class="fr"><label>게시물 URL <span style="color:#3B82F6;font-size:10px">(인스타/유튜브, 여러 개면 줄바꿈)</span></label><textarea id="fpost" rows="2" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:6px;font-family:inherit;font-size:13px">${e(getPostUrls(p).join('\n'))}</textarea></div>
     <div class="fg">
@@ -2857,20 +3298,23 @@ function openEditCP(cid,pid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCP('${cid}','${pid}')">저장</button></div>`);
 }
-function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');p.product=g('fp1');p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');Object.assign(p,prodFields());p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // ══════════════════════════════
 //  UPDATE / DELETE
 // ══════════════════════════════
 // 월 기준 상대 차수 계산 (표시용)
-function getMonthRound(wid){
-  const w=DB.weekly.find(x=>x.id===wid);if(!w)return w?.round;
+function getMonthRoundPlain(wid){
+  const w=DB.weekly.find(x=>x.id===wid);if(!w)return '';
   const proj=w.project||'기본';
   const ym=w.date.slice(0,7);
   const sameMonth=[...DB.weekly].filter(x=>x.date.slice(0,7)===ym&&(x.project||'기본')===proj).sort((a,b)=>a.round-b.round);
   const idx=sameMonth.findIndex(x=>x.id===wid);
-  const mon=parseInt(ym.slice(5))+'월';
-  return `${proj==='백팩'?'🎒 ':''}${mon} ${idx+1}차`;
+  return `${parseInt(ym.slice(5))}월 ${idx+1}차`;
+}
+function getMonthRound(wid){
+  const w=DB.weekly.find(x=>x.id===wid);if(!w)return w?.round;
+  return projPrefix(w.project||'기본')+getMonthRoundPlain(wid);
 }
 
 function toggleShipped(wid,pid,checked){
@@ -3089,6 +3533,7 @@ function resetData(){
   if(!confirm('⚠️ 모든 데이터를 기본값(엑셀 원본)으로 초기화할까요?\n직접 추가/수정한 내용은 모두 사라집니다.')) return;
   try{localStorage.removeItem('sdmgr14');}catch(e){}
   seed();
+  undoRecord();  // 초기화 직전 상태를 되돌리기 기록에 남김
 
   cur={tab:'dash',campType:'릴스',id:null};
   renderSB();
@@ -3154,6 +3599,7 @@ try {
       DB.engagement = data.engagement || [];
       DB.screenshots = data.screenshots || [];
       DB.galleryHidden = data.galleryHidden || [];
+      DB.projects = data.projects || [];
     } else {
       seed();
       await window._fbSave();
@@ -3166,6 +3612,9 @@ try {
   console.warn('Firebase 연결 실패:', e);
   seed();
 }
+
+if(typeof stampProjectScope==='function') stampProjectScope(); // 캠페인 기록에 시딩 종류 도장
+if(typeof undoRebase==='function') undoRebase(); // 되돌리기 기준점(불러온 직후 상태)
 
 renderSB();
 pgDash();
@@ -3193,6 +3642,9 @@ onSnapshot(DB_DOC, (snap) => {
       DB.engagement = data.engagement || [];
       DB.screenshots = data.screenshots || [];
       DB.galleryHidden = data.galleryHidden || [];
+      DB.projects = data.projects || [];
+      if(typeof stampProjectScope==='function') stampProjectScope();
+      if(typeof undoReset==='function') undoReset(); // 다른 기기/자동 캡처로 바뀐 데이터를 덮어쓰지 않도록 되돌리기 기록 초기화
       renderSB();
       renderPage();
     }

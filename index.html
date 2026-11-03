@@ -1011,6 +1011,18 @@ function _renderCostModal(md){
     </div>
   </div>
 
+  <!-- 합계 줄 정리 안내 -->
+  ${(()=>{const bl=(md.rows||[]).filter(r=>!String(r.memo||'').trim()).concat((md.uncat||[]).filter(r=>!String(r.memo||'').trim()));
+    if(!bl.length) return '';
+    const q=bl.reduce((a,r)=>a+(r.qty||0),0), cst=bl.reduce((a,r)=>a+(r.cost||0),0);
+    return `<div style="background:#FFF1F0;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#991B1B;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div>⚠️ <b>적요가 비어 있는 줄 ${bl.length}개</b>(수량 ${fmtW(q)} · 원가 ${fmtC(cst)})가 있어요. 예전 엑셀 업로드 때 <b>합계 줄이 항목으로 섞여 들어간 것</b>일 수 있어요. 총 수량·원가에는 영향 없어요.</div>
+      <button onclick="costCleanBlank('${month}')" style="padding:5px 12px;border:1px solid #fca5a5;border-radius:7px;font-size:12px;cursor:pointer;background:#fff;color:#b91c1c;font-family:inherit;font-weight:600">이 줄 정리하기</button>
+    </div>`;})()}
+
+  <!-- 원가 비어 있는 줄 안내 -->
+  ${md.noCostQty>0?`<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#1E40AF">ℹ️ 이카운트에 <b>입고단가(원가)가 비어 있는 ${md.noCostRows||''}줄(수량 ${fmtW(md.noCostQty)}개)</b>이 있어요. <b>수량에는 포함</b>했고 <b>원가는 0원</b>으로 계산돼 있어요. (이카운트에서 입고단가를 채워 다시 올리면 원가까지 정확해져요)</div>`:''}
+
   <!-- 요약 카드 -->
   ${md.people&&!md.paidPeople&&!md.freePeople?`<div style="background:#FEF3C7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#92400E">
     ⚠️ 예전에 입력해둔 인원 <b>${fmtW(md.people)}명</b>이 남아있어요. 유가/무가로 나눠서 아래에 다시 입력해주세요 (합쳐서 ${fmtW(md.people)}명이 되도록).
@@ -1126,14 +1138,20 @@ function _renderCostModal(md){
         <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:700;color:#92400e;border-bottom:1px solid #fac775">수량</th>
         <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:700;color:#92400e;border-bottom:1px solid #fac775">원가</th>
         <th style="padding:7px 10px;font-size:10px;font-weight:700;color:#92400e;border-bottom:1px solid #fac775">채널 지정</th>
+        <th style="padding:7px 6px;border-bottom:1px solid #fac775"></th>
       </tr></thead>
       <tbody>
-        ${(md.uncat||[]).map((u,i)=>`<tr style="border-bottom:1px solid #fde68a">
-          <td style="padding:8px 14px;font-size:11px;color:#555">${u.memo}</td>
+        ${(md.uncat||[]).map((u,i)=>{
+          const allQ=(md.rows||[]).reduce((a,r)=>a+(r.qty||0),0)+(md.uncat||[]).reduce((a,r)=>a+(r.qty||0),0);
+          const sus=((md.rows||[]).length+(md.uncat||[]).length)>2&&Math.abs((u.qty||0)*2-allQ)<0.5;   // 나머지 전체 수량의 합과 같은 줄 = 합계 줄일 가능성
+          const blank=!String(u.memo||'').trim();
+          return `<tr style="border-bottom:1px solid #fde68a${sus?';background:#fff1f0':''}">
+          <td style="padding:8px 14px;font-size:11px;color:#555">${blank?'<span style="color:#aaa">(적요 없음)</span>':e(u.memo)}${u.type?` <span style="font-size:10px;color:#92400e;background:#fde68a;border-radius:10px;padding:1px 7px" title="이카운트 사용유형명">${e(u.type)}</span>`:''}${sus?' <span style="font-size:10px;font-weight:700;color:#b42318;background:#fee4e2;border-radius:10px;padding:1px 7px" title="수량이 나머지 전체 수량의 합과 같아요. 합계 줄이 항목으로 읽힌 것 같아요 — 오른쪽 ✕로 지워주세요">⚠ 합계 줄 같아요</span>':''}</td>
           <td style="padding:8px 10px;text-align:right">${fmtW(u.qty)}</td>
           <td style="padding:8px 10px;text-align:right">${fmtC(u.cost)}</td>
           <td style="padding:8px 10px"><input type="text" placeholder="채널명 입력" style="padding:3px 8px;border:1px solid #fac775;border-radius:5px;font-size:11px;width:120px;font-family:inherit;background:#fff" onkeydown="if(event.key==='Enter'&&this.value.trim())costAssignCat('${month}',${i},this.value.trim())"></td>
-        </tr>`).join('')}
+          <td style="padding:8px 6px"><button onclick="costDelUncat('${month}',${i})" title="이 줄 삭제" style="background:none;border:none;cursor:pointer;color:#c2410c;font-size:13px">✕</button></td>
+        </tr>`;}).join('')}
       </tbody>
     </table>
   </div>`:''}
@@ -1301,6 +1319,23 @@ function costDelExtra(month,idx){
   md.extra.splice(idx,1);costSave();_renderCostModal(md);
 }
 
+function costCleanBlank(month){
+  const md=DB.cost.find(x=>x.month===month);if(!md)return;
+  const isBlank=r=>!String(r.memo||'').trim();
+  const n=(md.rows||[]).filter(isBlank).length+(md.uncat||[]).filter(isBlank).length;
+  if(!n)return;
+  if(!confirm('적요가 비어 있는 줄 '+n+'개를 삭제할까요?\n(합계 줄이 섞여 들어간 줄이에요. 실수하면 Ctrl+Z로 되돌릴 수 있어요)'))return;
+  md.rows=(md.rows||[]).filter(r=>!isBlank(r));
+  md.uncat=(md.uncat||[]).filter(r=>!isBlank(r));
+  costSave();_renderCostModal(md);toast(n+'개 줄 정리됨');
+}
+function costDelUncat(month,idx){
+  const md=DB.cost.find(x=>x.month===month);if(!md||!md.uncat)return;
+  const u=md.uncat[idx];if(!u)return;
+  if(!confirm('이 줄을 삭제할까요?\n'+(u.memo||'(적요 없음)')+' · 수량 '+fmtW(u.qty)+' · '+fmtC(u.cost)))return;
+  md.uncat.splice(idx,1);
+  costSave();_renderCostModal(md);toast('삭제됨');
+}
 function costAssignCat(month,idx,cat){
   const md=DB.cost.find(x=>x.month===month);if(!md)return;
   const u=md.uncat[idx];
@@ -1336,27 +1371,58 @@ function costParseXlsx(input,month){
       const wb=XLSX.read(e.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1});
-      const dataRows=raw.slice(2).filter(r=>{
-        const qty=parseFloat(r[6]),cost=parseFloat(r[8]);
-        const name=String(r[5]||'');
-        return !isNaN(qty)&&!isNaN(cost)&&cost>0&&!/계$|합계/.test(name);
+      // 제목 줄을 찾아 칸 이름(사용유형명/품목명/수량/원가/적요)으로 열 위치를 잡음 — 못 찾으면 예전처럼 고정 위치(D·F·G·I·K열)
+      let hdrIdx=-1;
+      for(let i=0;i<Math.min(raw.length,6);i++){
+        const cells=(raw[i]||[]).map(c=>String(c==null?'':c).replace(/\s+/g,''));
+        if(cells.some(c=>/품목명/.test(c))&&cells.some(c=>/^수량/.test(c))){ hdrIdx=i; break; }
+      }
+      const hdr=hdrIdx>=0?(raw[hdrIdx]||[]).map(c=>String(c==null?'':c).replace(/\s+/g,'')):[];
+      const colOf=(re,fallback)=>{ const k=hdr.findIndex(c=>re.test(c)); return k>=0?k:fallback; };
+      const C={type:colOf(/사용유형/,3),name:colOf(/품목명/,5),qty:colOf(/^수량/,6),cost:colOf(/^입고단가$/,colOf(/^원가$/,colOf(/원가/,8))),memo:colOf(/적요/,10)};
+      const startRow=hdrIdx>=0?hdrIdx+1:2;
+      // 합계/소계/총계 줄은 실제 거래가 아니라서 제외 (이걸 포함하면 수량·원가가 수억 원대로 부풀어요)
+      let skippedSum=0, noCostQty=0, noCostRows=0;
+      const isSumLabel=v=>{
+        const t=String(v==null?'':v).replace(/\s+/g,'');
+        return /^(합계|총계|소계|누계|월계|일계|총합계|전체합계)$/.test(t)||/(합계|총계|소계|누계|월계|일계)$/.test(t);
+      };
+      const dataRows=raw.slice(startRow).filter(r=>{
+        const qty=parseFloat(r[C.qty]);
+        if(isNaN(qty)||qty===0) return false;
+        const name=String(r[C.name]||'').trim();
+        const memo=String(r[C.memo]||'').trim();
+        const sumRow=[0,1,2,3,4,5,C.type,C.name].some(c=>isSumLabel(r[c]))||/계$|합계/.test(name)   // 앞쪽 칸에 '합계' 같은 글자가 있는 줄
+                   ||(!name&&!memo);                                                                    // 품목명도 적요도 없는 줄(합계 줄)
+        if(sumRow){ skippedSum++; return false; }
+        // 입고단가(원가)가 비어 있어도 수량은 세고 원가만 0원으로 계산 (이카운트 합계 수량과 맞추기 위해)
+        if(!(parseFloat(r[C.cost])>0)){ noCostQty+=qty; noCostRows++; }
+        return true;
       });
+      // 사용유형명 + 적요를 같이 보고 채널 분류 (COST_AUTO_CATS 규칙 순서대로)
+      const catOf=(typ,memo)=>{ for(const cc of COST_AUTO_CATS){ if(cc.fn(typ,memo)) return cc.key; } return null; };
       const byMemo={};
       dataRows.forEach(r=>{
-        const memo=String(r[10]||'');
-        if(!byMemo[memo])byMemo[memo]={type:String(r[3]||''),qty:0,cost:0};
-        byMemo[memo].qty+=parseFloat(r[6]);
-        byMemo[memo].cost+=parseFloat(r[6])*parseFloat(r[8]);
+        const typ=String(r[C.type]||'').trim();            // 사용유형명 (예: 시딩, 거래처증정, 이벤트 증정, 샘플)
+        const memoRaw=String(r[C.memo]||'').trim();
+        // 적요가 비어 있는 줄은 사용유형명별로 따로 묶어서, 서로 다른 줄이 한 덩어리로 합쳐져 엉뚱한 채널로 분류되는 걸 막음
+        const memo=memoRaw||('(적요 없음'+(typ?'·'+typ:'')+')');
+        // 같은 적요라도 사용유형명 때문에 분류가 갈리면(예: 시딩 / 거래처증정) 따로 묶고,
+        // 분류가 안 되는 줄(미분류)은 사용유형명이 다르면 따로 보여줌
+        const cat=catOf(typ,memo);
+        const key=memo+'\u0001'+(cat||('T:'+typ));
+        if(!byMemo[key])byMemo[key]={memo,type:typ,cat,qty:0,cost:0};
+        const unit=parseFloat(r[C.cost]);
+        byMemo[key].qty+=parseFloat(r[C.qty]);
+        byMemo[key].cost+=parseFloat(r[C.qty])*(unit>0?unit:0);
       });
       const rows=[],uncat=[];
-      Object.entries(byMemo).forEach(([memo,d])=>{
-        let cat=null;
-        for(const cc of COST_AUTO_CATS){if(cc.fn(d.type,memo)){cat=cc.key;break;}}
-        if(cat)rows.push({memo,cat,qty:d.qty,cost:d.cost});
-        else uncat.push({memo,qty:d.qty,cost:d.cost});
+      Object.values(byMemo).forEach(d=>{
+        if(d.cat)rows.push({memo:d.memo,cat:d.cat,qty:d.qty,cost:d.cost});
+        else uncat.push({memo:d.memo,qty:d.qty,cost:d.cost,type:d.type});
       });
       const md=DB.cost.find(x=>x.month===month);
-      if(md){md.rows=rows;md.uncat=uncat;md.overrides={};costSave();toast('업로드 완료!');_renderCostModal(md);}
+      if(md){md.rows=rows;md.uncat=uncat;md.overrides={};md.noCostQty=noCostQty;md.noCostRows=noCostRows;costSave();toast('업로드 완료!'+(skippedSum?' (합계 줄 '+skippedSum+'개는 자동 제외)':'')+(noCostRows?' · 원가 비어 있는 '+noCostRows+'줄 포함':''));_renderCostModal(md);}
     }catch(err){toast('파일 오류: '+err.message);}
   };
   reader.readAsArrayBuffer(file);

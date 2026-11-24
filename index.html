@@ -2097,6 +2097,14 @@ function pgExposureGallery(){
   // → 배송완료 안 해서 안 보이는 사람이 캠페인 쪽에서도 "이미 있다"며 같이 사라지는 일이 없게
   const weeklyKeysByProj={};
   const weeklyUrlSet=new Set();
+  const weeklyCntByProj={};   // 시딩 종류 → (이름 → 주간 리스트에 표시된 게시물 수)
+  function weeklyPostCount(text,proj){
+    const key=normH(text); const m=weeklyCntByProj[proj];
+    if(!key||!m) return 0;
+    let best=0;
+    m.forEach(function(n,k){ if(k===key||(key.length>=2&&k.length>=2&&(k.includes(key)||key.includes(k)))) best=Math.max(best,n); });
+    return best;
+  }
   function inWeekly(text,proj){   // proj를 주면 그 시딩 종류의 주간 리스트에서만 비교
     const key=normH(text);
     if(!key) return false;
@@ -2115,7 +2123,6 @@ function pgExposureGallery(){
 
   // 1) 주차별 그룹 (기존 로직)
   [...DB.weekly].sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(w){
-    if(isCampTab) return;
     let people=(w.people||[]);
     const pk=w.project||'기본';
     if(_galleryCat==='⭐즐겨찾기'){
@@ -2130,6 +2137,8 @@ function pgExposureGallery(){
     people.forEach(function(p){
       if(p.handle) keySet.add(normH(p.handle)); if(p.realname) keySet.add(normH(p.realname));
       getPostUrls(p).forEach(function(u){ weeklyUrlSet.add(normPostUrl(u)); });
+      const _cm=weeklyCntByProj[pk]||(weeklyCntByProj[pk]=new Map()), _n=getPostUrls(p).length;
+      [p.handle,p.realname].forEach(function(t){ if(t){ const k=normH(t); _cm.set(k,Math.max(_cm.get(k)||0,_n)); } });
     });
     const items=people.map(function(p){
       return {handle:p.handle,product:(p.products||[p.product]).filter(Boolean).join(', ')||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'weekly',wid:w.id,pid:p.id}};
@@ -2157,9 +2166,23 @@ function pgExposureGallery(){
       if(_galleryCat.indexOf('camp:')===0&&c.type!==_galleryCat.slice(5)) return;
       const items=[];
       (c.people||[]).forEach(function(p){
-        const urls=pickExtra(getPostUrls(p),[p.handle],scopeProj(p));
-        if(urls===null) return;
-        const it={handle:p.handle,product:prodStr(p)||'-',urls:urls,posted:urls.length>0,src:{type:'campaign',cid:c.id,pid:p.id}};
+        let it;
+        if(isCampTab){
+          // 캠페인 탭: 이 차수의 참여자는 전원 표시
+          const urlsAll=getPostUrls(p);
+          const own=urlsAll.filter(function(u){ return !weeklyUrlSet.has(normPostUrl(u)); });
+          if(own.length){
+            it={handle:p.handle,product:prodStr(p)||'-',urls:own,posted:true,src:{type:'campaign',cid:c.id,pid:p.id}};
+          }else{
+            const wc=urlsAll.length||weeklyPostCount(p.handle,scopeProj(p));
+            // 이미 아래 주간 리스트 그룹에 게시물이 보이는 사람 → 카드는 겹치지 않게 칩만
+            it={handle:p.handle,product:prodStr(p)||'-',urls:[],posted:wc>0,ref:wc>0?wc:0,src:{type:'campaign',cid:c.id,pid:p.id}};
+          }
+        }else{
+          const urls=pickExtra(getPostUrls(p),[p.handle],scopeProj(p));
+          if(urls===null) return;
+          it={handle:p.handle,product:prodStr(p)||'-',urls:urls,posted:urls.length>0,src:{type:'campaign',cid:c.id,pid:p.id}};
+        }
         if(notHidden(it.src)) items.push(it);
       });
       if(!items.length) return;
@@ -2184,9 +2207,14 @@ function pgExposureGallery(){
     });
   }
 
-  if(isCampTab) groups.sort(function(a,b){ return (b.dateLabel||'').localeCompare(a.dateLabel||''); });   // 최근 차수가 위로
+  if(isCampTab){   // 캠페인 탭: 맨 위에 '캠페인 차수별 참여자'(최근 차수 먼저), 그 아래에 주간 리스트 결과물
+    const cg=groups.filter(function(g){return g.key.indexOf('c-')===0;}).sort(function(a,b){ return (b.dateLabel||'').localeCompare(a.dateLabel||''); });
+    const wg=groups.filter(function(g){return g.key.indexOf('c-')!==0;});
+    groups.splice(0,groups.length);
+    cg.concat(wg).forEach(function(g){ groups.push(g); });
+  }
   let totalPosted=0,totalPending=0;
-  groups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
+  groups.forEach(function(g){ g.items.forEach(function(x){ if(x.ref) return; if(x.posted) totalPosted++; else totalPending++; }); });   // ref(주간 그룹에서 이미 센 사람)는 중복 집계 안 함
 
   _galleryBaseGroups=groups; // 검색어 입력 시엔 이걸 재사용해서 전체 재렌더링(=IME 조합 끊김) 피함
 
@@ -2272,7 +2300,7 @@ function renderGalleryResults(){
         ${g.items.map(function(x,idx){
           const rowId='pend-row-'+g.key.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+idx;
           return x.posted
-            ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#D1FAE5;color:#065F46;font-weight:600">✅ ${e(x.handle)}${x.urls.length>1?' ×'+x.urls.length:''}</span>`
+            ? (x.ref?`<span title="이 사람의 게시물은 아래 주간 리스트 그룹에 있어요" style="font-size:11px;padding:4px 10px;border-radius:20px;background:#ECFDF5;color:#047857;font-weight:600;border:1px dashed #6EE7B7">✅ ${e(x.handle)} · 주간 게시물 ${x.ref}개</span>`:`<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:#D1FAE5;color:#065F46;font-weight:600">✅ ${e(x.handle)}${x.urls.length>1?' ×'+x.urls.length:''}</span>`)
             : `<span onclick="event.stopPropagation();_galleryExpanded['${g.key}']=true;renderGalleryResults();setTimeout(()=>document.getElementById('${rowId}')?.scrollIntoView({behavior:'smooth',block:'center'}),50)" style="cursor:pointer;font-size:11px;padding:4px 10px;border-radius:20px;background:#FEF3C7;color:#92400E;font-weight:600">⏳ ${e(x.handle)}</span>`;
         }).join('')}
       </div>

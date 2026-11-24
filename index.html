@@ -2097,13 +2097,17 @@ function pgExposureGallery(){
   // → 배송완료 안 해서 안 보이는 사람이 캠페인 쪽에서도 "이미 있다"며 같이 사라지는 일이 없게
   const weeklyKeysByProj={};
   const weeklyUrlSet=new Set();
-  const weeklyCntByProj={};   // 시딩 종류 → (이름 → 주간 리스트에 표시된 게시물 수)
-  function weeklyPostCount(text,proj){
-    const key=normH(text); const m=weeklyCntByProj[proj];
-    if(!key||!m) return 0;
-    let best=0;
-    m.forEach(function(n,k){ if(k===key||(key.length>=2&&k.length>=2&&(k.includes(key)||key.includes(k)))) best=Math.max(best,n); });
-    return best;
+  const weeklyUrlsByProj={};   // 시딩 종류 → (이름 → 주간 리스트에 올린 게시물 링크들)
+  function weeklyPostsFor(text,proj){   // 캠페인 참여자의 주간 리스트 게시물 링크들 (중복 제거)
+    const key=normH(text); const m=weeklyUrlsByProj[proj];
+    if(!key||!m) return [];
+    const out=[], seen=new Set();
+    m.forEach(function(arr,k){
+      if(k===key||(key.length>=2&&k.length>=2&&(k.includes(key)||key.includes(k)))){
+        arr.forEach(function(u){ const nk=normPostUrl(u); if(!seen.has(nk)){ seen.add(nk); out.push(u); } });
+      }
+    });
+    return out;
   }
   function inWeekly(text,proj){   // proj를 주면 그 시딩 종류의 주간 리스트에서만 비교
     const key=normH(text);
@@ -2137,8 +2141,8 @@ function pgExposureGallery(){
     people.forEach(function(p){
       if(p.handle) keySet.add(normH(p.handle)); if(p.realname) keySet.add(normH(p.realname));
       getPostUrls(p).forEach(function(u){ weeklyUrlSet.add(normPostUrl(u)); });
-      const _cm=weeklyCntByProj[pk]||(weeklyCntByProj[pk]=new Map()), _n=getPostUrls(p).length;
-      [p.handle,p.realname].forEach(function(t){ if(t){ const k=normH(t); _cm.set(k,Math.max(_cm.get(k)||0,_n)); } });
+      const _um=weeklyUrlsByProj[pk]||(weeklyUrlsByProj[pk]=new Map()), _urls=getPostUrls(p);
+      [p.handle,p.realname].forEach(function(t){ if(t){ const k=normH(t); _um.set(k,(_um.get(k)||[]).concat(_urls)); } });
     });
     const items=people.map(function(p){
       return {handle:p.handle,product:(p.products||[p.product]).filter(Boolean).join(', ')||'-',urls:getPostUrls(p),posted:getPostUrls(p).length>0,src:{type:'weekly',wid:w.id,pid:p.id}};
@@ -2168,16 +2172,13 @@ function pgExposureGallery(){
       (c.people||[]).forEach(function(p){
         let it;
         if(isCampTab){
-          // 캠페인 탭: 이 차수의 참여자는 전원 표시
-          const urlsAll=getPostUrls(p);
-          const own=urlsAll.filter(function(u){ return !weeklyUrlSet.has(normPostUrl(u)); });
-          if(own.length){
-            it={handle:p.handle,product:prodStr(p)||'-',urls:own,posted:true,src:{type:'campaign',cid:c.id,pid:p.id}};
-          }else{
-            const wc=urlsAll.length||weeklyPostCount(p.handle,scopeProj(p));
-            // 이미 아래 주간 리스트 그룹에 게시물이 보이는 사람 → 카드는 겹치지 않게 칩만
-            it={handle:p.handle,product:prodStr(p)||'-',urls:[],posted:wc>0,ref:wc>0?wc:0,src:{type:'campaign',cid:c.id,pid:p.id}};
-          }
+          // 캠페인 탭: 이 차수의 참여자는 전원 표시.
+          // 캠페인에 직접 넣은 링크가 있으면 그것을, 없으면 주간 리스트에 올려둔 이 사람의 게시물을 카드로 같이 보여줌
+          // (주간 그룹과 같은 카드가 겹쳐 보여도 괜찮음 — 합계에는 한 번만 셈)
+          let urls=getPostUrls(p);
+          if(!urls.length) urls=weeklyPostsFor(p.handle,scopeProj(p));
+          const dupe=urls.length>0&&urls.every(function(u){ return weeklyUrlSet.has(normPostUrl(u)); });
+          it={handle:p.handle,product:prodStr(p)||'-',urls:urls,posted:urls.length>0,dupe:dupe,src:{type:'campaign',cid:c.id,pid:p.id}};
         }else{
           const urls=pickExtra(getPostUrls(p),[p.handle],scopeProj(p));
           if(urls===null) return;
@@ -2214,7 +2215,7 @@ function pgExposureGallery(){
     cg.concat(wg).forEach(function(g){ groups.push(g); });
   }
   let totalPosted=0,totalPending=0;
-  groups.forEach(function(g){ g.items.forEach(function(x){ if(x.ref) return; if(x.posted) totalPosted++; else totalPending++; }); });   // ref(주간 그룹에서 이미 센 사람)는 중복 집계 안 함
+  groups.forEach(function(g){ g.items.forEach(function(x){ if(x.dupe) return; if(x.posted) totalPosted++; else totalPending++; }); });   // 주간 그룹과 같은 카드(dupe)는 중복 집계 안 함
 
   _galleryBaseGroups=groups; // 검색어 입력 시엔 이걸 재사용해서 전체 재렌더링(=IME 조합 끊김) 피함
 
@@ -2278,7 +2279,7 @@ function renderGalleryResults(){
     _galleryExpanded={};
     groups.forEach(function(g,i){
       const hasPending=g.items.some(function(x){return !x.posted;});
-      _galleryExpanded[g.key]=hasPending||i===0;
+      _galleryExpanded[g.key]=hasPending||i===0||(_galleryCat==='릴스캠페인'||_galleryCat==='2차활용'||_galleryCat.indexOf('camp:')===0)&&g.key.indexOf('c-')===0;
     });
   }
   groups.forEach(function(g){ if(!(g.key in _galleryExpanded)) _galleryExpanded[g.key]=g.items.some(function(x){return !x.posted;}); });

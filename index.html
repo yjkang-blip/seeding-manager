@@ -220,8 +220,8 @@ document.addEventListener('touchmove',e=>{
   if(Math.abs(t.clientX-_dragStartX)>5||Math.abs(t.clientY-_dragStartY)>5) _isDragging=true;
 },{passive:true});
 document.addEventListener('touchend',()=>{setTimeout(()=>{_isDragging=false;},50);});
-var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[],galleryHidden:[],projects:[]};
-var cur={tab:'dash',campType:'릴스',id:null,expView:'list'};
+var DB={weekly:[],monthly:[],campaigns:[],exposure:[],cost:[],collabs:[],engagement:[],screenshots:[],galleryHidden:[],projects:[],campProducts:[],collabLabels:{}};
+var cur={tab:'dash',campType:'릴스',id:null,expView:'list',campProduct:'__all'};
 let _weeklyProject='기본'; // 주간 리스트 프로젝트 구분 (기본/백팩)
 function setWeeklyProject(p){
   _weeklyProject=p;
@@ -326,7 +326,7 @@ function save(){
 // ══════════════════════════════
 let _undoLast=null,_undoStack=[],_redoStack=[],_undoBusy=false,_undoPushT=0;
 const UNDO_MAX=100;
-const UNDO_LABEL={weekly:'주간 리스트',monthly:'월간',campaigns:'캠페인',exposure:'노출 보고서',cost:'현물정산',collabs:'협업',engagement:'반응수 기록',screenshots:'캡처',galleryHidden:'갤러리 카드',projects:'시딩 종류'};
+const UNDO_LABEL={weekly:'주간 리스트',monthly:'월간',campaigns:'캠페인',exposure:'노출 보고서',cost:'현물정산',collabs:'협업',engagement:'반응수 기록',screenshots:'캡처',galleryHidden:'갤러리 카드',projects:'시딩 종류',campProducts:'캠페인 제품',collabLabels:'협업 탭 이름'};
 function undoSnap(){
   const snap={};
   Object.keys(DB).forEach(function(k){
@@ -390,7 +390,8 @@ function undoDescribe(from,to){
 function undoRestore(snap){
   const nd={};
   Object.keys(snap).forEach(function(k){ nd[k]=JSON.parse(snap[k]); });
-  ['weekly','monthly','campaigns','exposure','cost','collabs','engagement','screenshots','galleryHidden','projects'].forEach(function(k){ if(nd[k]===undefined) nd[k]=[]; });
+  ['weekly','monthly','campaigns','exposure','cost','collabs','engagement','screenshots','galleryHidden','projects','campProducts'].forEach(function(k){ if(nd[k]===undefined) nd[k]=[]; });
+  if(nd.collabLabels===undefined) nd.collabLabels={};
   DB=nd;
 }
 function undoRun(from,to,msg){
@@ -645,12 +646,12 @@ function campBadges(handle,proj){
               c.type==='브랜디드'?'background:#FEE2E2;color:#991B1B':
               c.type==='유튜브'?'background:#FEF9C3;color:#854D0E':
               'background:#F1F5F9;color:#475569';
-    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">${c.name} ${c.round}차<span onclick="event.stopPropagation();unlinkCampBadge('${c.id}','${e(handle)}','${e(proj)}')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>`;
+    return`<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;${col};white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">${e(campLabel(c))}<span onclick="event.stopPropagation();unlinkCampBadge('${c.id}','${e(handle)}','${e(proj)}')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>`;
   }).join('');
   // collab 딱지
   const collabBadgeHtml=DB.weekly.filter(w=>(w.project||'기본')===proj).flatMap(w=>w.people).filter(p=>normH(p.handle)===key&&(p.collabTags||[]).length)
     .flatMap(p=>p.collabTags||[]).filter((v,i,a)=>a.indexOf(v)===i)
-    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">'+b+' 협업<span onclick="event.stopPropagation();unlinkCollabBadge(\''+e(handle)+'\',\''+b+'\',\''+e(proj)+'\')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>')
+    .map(b=>'<span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:#EDE9FE;color:#5B21B6;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;margin:1px">'+e(collabName(b))+' 협업<span onclick="event.stopPropagation();unlinkCollabBadge(\''+e(handle)+'\',\''+b+'\',\''+e(proj)+'\')" style="cursor:pointer;opacity:0.6;font-weight:700" title="연결 해제">✕</span></span>')
     .join('');
   return campBadgeHtml+collabBadgeHtml||'';
 }
@@ -690,7 +691,7 @@ function addToCampOrCollab(handle,val,proj){
         }
       });
     });
-    save();renderSB();renderPage();toast(handle+' → '+brand+' 협업 딱지 추가됨');
+    save();renderSB();renderPage();toast(handle+' → '+collabName(brand)+' 협업 딱지 추가됨');
   } else {
     addToCamp(handle,val,proj);
   }
@@ -703,7 +704,7 @@ function addToCamp(handle,campId,proj){
   if(c.people.some(p=>normH(p.handle)===normH(handle)&&scopeProj(p)===proj)){toast('이미 추가됨');return;}
   let src=null;DB.weekly.forEach(w=>{if((w.project||'기본')!==proj)return;const f=w.people.find(p=>normH(p.handle)===normH(handle));if(f)src=f;});
   c.people.push({id:'cp'+uid(),project:proj,handle:src?.handle||handle,url:src?.url||'',followers:src?.followers||0,products:prodList(src),product:prodStr(src),contact:src?.contact||'',address:src?.address||'',fee:'',note:''});
-  save();renderSB();renderPage();toast(`${handle} → ${c.name} ${c.round}차 추가됨`);
+  save();renderSB();renderPage();toast(`${handle} → ${campLabel(c)} 추가됨`);
 }
 
 // ══════════════════════════════
@@ -781,7 +782,7 @@ function renderSB(){
         const total=w.people.length;
         const allDone=done===total&&total>0;
         h+=`<button class="sbi${cur.id===w.id?' on':''}" onclick="selW('${w.id}')">
-          <span class="rn">${idx+1}차</span>
+          <span class="rn" title="${e(w.label||(idx+1)+'차')}">${e((w.label||(idx+1)+'차').slice(0,8))}</span>
           <span class="dt">${w.date.slice(5).replace('-','/')}</span>
           <span class="bk" style="${allDone?'background:#52B788;color:#fff':''}">
             ${done>0?done+'/':''}${total}
@@ -800,11 +801,24 @@ function renderSB(){
     });
     h+=`<button class="sb-add" onclick="openAddM()">＋ 새 월간 리스트</button>`;
   } else if(t==='campaign'){
-    h+=`<div class="sb-ttl">${cur.campType} 캠페인</div>`;
-    DB.campaigns.filter(c=>c.type===cur.campType).sort((a,b)=>b.round-a.round).forEach(c=>{
-      h+=`<button class="sbi${cur.id===c.id?' on':''}" onclick="selC('${c.id}')">
+    ensureCampProduct();
+    const _cp=curCampProduct(), _prods=campProductChips(), _hasUn=DB.campaigns.some(c=>!c.product);
+    const _chip=(key,label,on)=>`<button data-k="${e(key)}" onclick="setCampProduct(this.dataset.k)" style="flex:1 1 auto;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;white-space:nowrap;background:${on?'#52B788':'rgba(255,255,255,.08)'};color:#fff">${label}</button>`;
+    h+=`<div style="display:flex;flex-wrap:wrap;gap:4px;padding:0 4px 6px">
+      ${_chip('__all','전체',_cp==='__all')}${_prods.map(n=>_chip(n,'📦 '+e(n),_cp===n)).join('')}${(_prods.length&&_hasUn)?_chip('','제품 미지정',_cp===''):''}
+    </div>
+    <div style="padding:0 4px 10px"><button onclick="openCampProductManager()" style="width:100%;padding:5px 8px;border-radius:7px;border:1px dashed rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.65);font-size:11px;font-family:inherit;cursor:pointer">＋ 제품 추가 · 관리</button></div>`;
+    const _ptxt=_cp==='__all'?'':(_cp===''?'제품 미지정 · ':_cp+' · ');
+    h+=`<div class="sb-ttl">${e(_ptxt)}${cur.campType} 캠페인</div>`;
+    const _cl=DB.campaigns.filter(c=>c.type===cur.campType&&campInProduct(c));
+    const _hasProd=_cp==='__all'&&_cl.some(c=>c.product);   // 전체 보기에서는 제품별로 묶어서 보여줌
+    campGroups(_cl).forEach(gr=>{
+      if(_hasProd) h+=`<div class="sb-ttl" style="margin-top:8px">📦 ${e(gr.product||'제품 미지정')}</div>`;
+      gr.items.forEach(c=>{
+        h+=`<button class="sbi${cur.id===c.id?' on':''}" onclick="selC('${c.id}')">
         <span class="rn">${c.round}차</span><span class="dt">${c.date.slice(5).replace('-','/')}</span>
         <span class="bk">${c.people.length}</span></button>`;
+      });
     });
     h+=`<button class="sb-add" onclick="openAddCampRound()">＋ 새 ${cur.campType} 차수</button>`;
   }
@@ -815,7 +829,7 @@ function selW(id){if(_isDragging)return;cur.id=id;cur.tab='weekly';document.quer
 function selM(id){if(_isDragging)return;cur.id=id;cur.tab='monthly';document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===2));renderSB();renderPage();}
 function selC(id){if(_isDragging)return;
   const c=DB.campaigns.find(x=>x.id===id);
-  if(c) cur.campType=c.type;
+  if(c){ cur.campType=c.type; const _p=curCampProduct(); if(_p!=='__all'&&(c.product||'')!==_p) cur.campProduct=c.product||''; }
   cur.id=id;cur.tab='campaign';
   document.querySelectorAll('.mt').forEach((b,i)=>b.classList.toggle('on',i===3));
   renderSB();renderPage();
@@ -1450,7 +1464,7 @@ function pgDash(){
   <div class="dbgrid">
     <div class="dc"><h3>최근 주간 리스트</h3>
       ${recent.map(w=>`<div class="ri" onclick="setWeeklyProject('${w.project||'기본'}');selW('${w.id}')">
-        <div class="ri-ico">${projIcon(w.project||'기본')||getMonthRoundPlain(w.id).replace(/\d+월 /,'')}</div>
+        <div class="ri-ico">${projIcon(w.project||'기본')||getMonthRoundAuto(w.id).replace(/\d+월 /,'')}</div>
         <div><div class="rin">${getMonthRound(w.id)}</div><div class="ris">${w.date}</div></div>
         <span class="ribk">${w.people.length}명</span>
       </div>`).join('')}
@@ -1459,7 +1473,7 @@ function pgDash(){
       ${recentC.map(c=>{const fee=c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
         return`<div class="ri" onclick="selC('${c.id}')">
           <div class="ri-ico" style="background:#EEF2FF;color:#3730A3">${c.round}차</div>
-          <div><div class="rin">${c.name} ${c.round}차</div><div class="ris">${c.date} · ${c.people.length}명</div></div>
+          <div><div class="rin">${e(campLabel(c))}</div><div class="ris">${c.date} · ${c.people.length}명</div></div>
           <span class="ribk">${fee}만원</span>
         </div>`;}).join('')}
       ${sec?`<div class="ri" onclick="selC('${sec.id}')">
@@ -1518,10 +1532,11 @@ function pgWeekly(){
     <div class="tw">
       <div class="tw-h"><h3>전체 주간 리스트</h3><span class="sub">차수/날짜 직접 수정 가능</span></div>
       <div class="tsc"><table>
-        <thead><tr><th>차수</th><th>날짜</th><th>인원</th><th>팔로워 합계</th><th></th></tr></thead>
-        <tbody>${sorted.length===0?`<tr><td colspan="5" class="nodata">${e(projLabel(_weeklyProject))} 차수가 아직 없어요. 위 버튼으로 추가해보세요</td></tr>`:sorted.map(w=>`<tr>
+        <thead><tr><th>차수</th><th>날짜</th><th>표시 이름</th><th>인원</th><th>팔로워 합계</th><th></th></tr></thead>
+        <tbody>${sorted.length===0?`<tr><td colspan="6" class="nodata">${e(projLabel(_weeklyProject))} 차수가 아직 없어요. 위 버튼으로 추가해보세요</td></tr>`:sorted.map(w=>`<tr>
           <td><input type="number" value="${w.round}" min="1" style="width:50px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updWRound('${w.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
           <td><input type="date" value="${w.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updWDate('${w.id}',this.value)"></td>
+          <td><input type="text" value="${e(w.label||'')}" placeholder="${e(getMonthRoundAuto(w.id))}" title="비워두면 자동 이름(${e(getMonthRoundAuto(w.id))})" style="width:120px;padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updWLabel('${w.id}',this.value)"></td>
           <td>${w.people.length}명</td>
           <td>${(w.people.reduce((a,p)=>a+(p.followers||0),0)/10000).toFixed(1)}만</td>
           <td style="white-space:nowrap">
@@ -1536,6 +1551,7 @@ function pgWeekly(){
   const totalF=w.people.reduce((a,p)=>a+(p.followers||0),0);
   document.getElementById('nav-act').innerHTML=
     `<div class="dw"><span>날짜</span><input type="date" value="${w.date}" onchange="updWDate('${w.id}',this.value)"></div>
+     <button class="btn" onclick="openEditW('${w.id}')" title="차수 이름·번호·날짜·시딩 종류 수정">✏️ 차수 수정</button>
      <button class="btn pri" onclick="openAddP('${w.id}')">＋ 인원 추가</button>
      <button class="btn" onclick="openPaste('${w.id}')">📋 붙여넣기</button>
      <button class="btn" onclick="openImportP('${w.id}')" style="background:#F0FDF4;color:#166534;border-color:#BBF7D0;font-weight:600">📥 기존 인원 가져오기</button>
@@ -1561,11 +1577,11 @@ function pgWeekly(){
           const avail=DB.campaigns.filter(c=>!c.people.some(cp=>normH(cp.handle)===normH(p.handle)&&scopeProj(cp)===wproj));
           const availCollabs=(DB.collabs||[]).filter(c=>c.name!==p.handle);
           const collabBrands=[...new Set(availCollabs.map(c=>c.brand))];
-          const collabOpts=collabBrands.map(b=>'<option value="collab:'+b+'">'+b+' 협업</option>').join('');
+          const collabOpts=collabBrands.map(b=>'<option value="collab:'+b+'">'+e(collabName(b))+' 협업</option>').join('');
           const hasOpts=avail.length||availCollabs.length;
           const dropdown=hasOpts?`<select style="font-size:10px;padding:2px 5px;border-radius:5px;border:1px dashed #ccc;color:#888;background:#fff;font-family:inherit;margin-top:2px" onchange="addToCampOrCollab('${p.handle}',this.value,'${wproj}');this.value=''">
             <option value="">+ 캠페인 추가</option>
-            ${avail.map(c=>`<option value="${c.id}">${c.name} ${c.round}차</option>`).join('')}
+            ${avail.map(c=>`<option value="${c.id}">${e(campLabel(c))}</option>`).join('')}
             ${collabOpts}
           </select>`:'';
           const shipped=p.shipped;
@@ -1617,7 +1633,7 @@ function pgMonthly(){
       <tbody>${[...DB.monthly].sort((a,b)=>b.month.localeCompare(a.month)).map(m=>{
         const lnk=DB.weekly.filter(w=>m.weekIds.includes(w.id));
         return`<tr>
-          <td style="font-weight:700">${m.month.replace('-','년 ')+'월'}</td>
+          <td><input type="month" value="${m.month}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updMMonth('${m.id}',this.value)"></td>
           <td><input type="text" value="${e(m.note)}" style="width:180px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updMNote('${m.id}',this.value)"></td>
           <td>${lnk.map(w=>getMonthRound(w.id)).join(', ')||'-'}</td>
           <td>${lnk.reduce((a,w)=>a+w.people.length,0)}명</td>
@@ -1675,14 +1691,17 @@ function pgCampaign(){
   // zvzo/브랜더진 탭은 별도 처리하므로 초기화에서 제외
   const isCollabTab=cur.campType==='__zvzo'||cur.campType==='__branderz';
   if(!isCollabTab&&!types.includes(cur.campType)&&types.length) cur.campType=types[0];
-  const filtered=DB.campaigns.filter(c=>c.type===cur.campType).sort((a,b)=>b.round-a.round);
+  ensureCampProduct();
+  const filtered=DB.campaigns.filter(c=>c.type===cur.campType&&campInProduct(c)).sort((a,b)=>b.round-a.round);
+  const _cpSel=curCampProduct();
+  const _ptxt=_cpSel==='__all'?'':'📦 '+(_cpSel===''?'제품 미지정':_cpSel)+' · ';
   const c=cur.id?DB.campaigns.find(x=>x.id===cur.id&&x.type===cur.campType):null;
 
   // 서브탭 HTML
   const _stabTypes=types.map(function(t){
     var on=cur.campType===t?' on':'';
     var icon=t==='릴스'?'🎬':t==='2차 활용'?'♻️':'📌';
-    var cnt=DB.campaigns.filter(function(c){return c.type===t;}).length;
+    var cnt=DB.campaigns.filter(function(c){return c.type===t&&campInProduct(c);}).length;
     return '<span class="stab-group"><button class="stab'+on+'" data-type="'+t+'" onclick="campSubTab(this.dataset.type)">'+icon+' '+t+'<span class="camp-count">'+cnt+'</span></button>'
       +'<button class="stab-mini" data-type="'+t+'" onclick="renameCampType(this.dataset.type)" title="이름 수정">✏️</button>'
       +'<button class="stab-mini" data-type="'+t+'" onclick="deleteCampType(this.dataset.type)" title="삭제">✕</button></span>';
@@ -1690,10 +1709,10 @@ function pgCampaign(){
   var _zvzoOn=cur.campType==='__zvzo'?' on':'';
   var _branOn=cur.campType==='__branderz'?' on':'';
   const subHtml='<div class="stab-wrap">'+_stabTypes
-    +'<span class="stab-group"><button class="stab'+_zvzoOn+'" data-type="__zvzo" onclick="campSubTab(this.dataset.type)">🔗 zvzo 협업</button>'
+    +'<span class="stab-group"><button class="stab'+_zvzoOn+'" data-type="__zvzo" onclick="campSubTab(this.dataset.type)">🔗 '+e(collabName('zvzo'))+' 협업</button>'
     +'<button class="stab-mini" data-brand="zvzo" onclick="renameCollab(this.dataset.brand)" title="이름 수정">✏️</button>'
     +'<button class="stab-mini" data-brand="zvzo" onclick="deleteCollab(this.dataset.brand)" title="삭제">✕</button></span>'
-    +'<span class="stab-group"><button class="stab'+_branOn+'" data-type="__branderz" onclick="campSubTab(this.dataset.type)">🏷 브랜더진 협업</button>'
+    +'<span class="stab-group"><button class="stab'+_branOn+'" data-type="__branderz" onclick="campSubTab(this.dataset.type)">🏷 '+e(collabName('브랜더진'))+' 협업</button>'
     +'<button class="stab-mini" data-brand="브랜더진" onclick="renameCollab(this.dataset.brand)" title="이름 수정">✏️</button>'
     +'<button class="stab-mini" data-brand="브랜더진" onclick="deleteCollab(this.dataset.brand)" title="삭제">✕</button></span>'
     +'<button class="stab-new" onclick="openNewCampType()">＋ 새 유형</button>'
@@ -1719,11 +1738,13 @@ function pgCampaign(){
       <div class="sc"><div class="sc-l">${cur.campType==='릴스'?'총 비용':'배송지 확보'}</div><div class="sc-n">${cur.campType==='릴스'?totalFee+'<small>만원</small>':filtered.flatMap(c=>c.people).filter(p=>p.address).length+'<small>명</small>'}</div></div>
     </div>
     <div class="tw">
-      <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${cur.campType} 캠페인</h3><span class="sub">${filtered.length}차 · 총 ${totalP}명</span></div>
+      <div class="tw-h"><h3>${e(_ptxt)}${cur.campType==='릴스'?'🎬':cur.campType==='2차 활용'?'♻️':'📌'} ${cur.campType} 캠페인</h3><span class="sub">${filtered.length}차 · 총 ${totalP}명</span></div>
       <div class="tsc"><table>
-        <thead><tr><th>차수</th><th>날짜</th><th>발송월</th><th>업로드월</th><th>인원</th><th>팔로워</th><th>${cur.campType==='릴스'?'비용':'배송지 확보'}</th><th></th></tr></thead>
-        <tbody>${filtered.length===0?`<tr><td colspan="6" class="nodata">차수를 추가해주세요</td></tr>`:
-          filtered.map(c=>{
+        <thead><tr><th>제품</th><th>차수</th><th>날짜</th><th>발송월</th><th>업로드월</th><th>인원</th><th>팔로워</th><th>${cur.campType==='릴스'?'비용':'배송지 확보'}</th><th></th></tr></thead>
+        <tbody>${filtered.length===0?`<tr><td colspan="9" class="nodata">차수를 추가해주세요</td></tr>`:
+          campGroups(filtered).map(gr=>{
+            const _gh=(_cpSel==='__all'&&filtered.some(x=>x.product))?`<tr><td colspan="9" style="background:#f7fdfa;font-weight:700;color:#1D4E3A;font-size:12px;padding:8px 14px">📦 ${e(gr.product||'제품 미지정')} <span style="font-weight:400;color:#888">· ${gr.items.length}개 차수 · ${gr.items.reduce((a,x)=>a+x.people.length,0)}명</span></td></tr>`:'';
+            return _gh+gr.items.map(c=>{
             const fee=c.people.reduce((a,p)=>{const n=parseInt((p.fee||'').replace(/[^0-9]/g,''));return a+(n||0);},0);
             const f=c.people.reduce((a,p)=>a+(p.followers||0),0);
             const sendDates=c.people.map(p=>p.sendDate).filter(Boolean);
@@ -1731,6 +1752,7 @@ function pgCampaign(){
             const sendMonths=[...new Set(sendDates.map(d=>d.slice(0,7)))].join(', ')||'-';
             const uploadMonths=[...new Set(uploadDates.map(d=>d.slice(0,7)))].join(', ')||'-';
             return`<tr>
+              <td><input list="camp-prod-list" value="${e(c.product||'')}" placeholder="제품 미지정" style="width:130px;padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updCProduct('${c.id}',this.value)"></td>
               <td><input type="number" value="${c.round}" min="1" style="width:48px;padding:4px 7px;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;font-weight:700;font-family:inherit" onchange="updCRound('${c.id}',this.value)"><span style="font-size:12px;color:#bbb">차</span></td>
               <td><input type="date" value="${c.date}" style="padding:4px 8px;border-radius:6px;border:1px solid #e8e8e8;font-size:12px;font-family:inherit" onchange="updCDate('${c.id}',this.value)"></td>
               <td><span style="font-size:11px;color:#52B788">${sendMonths}</span></td>
@@ -1742,9 +1764,9 @@ function pgCampaign(){
                 <button class="btn sm" onclick="selC('${c.id}')">열기 →</button>
                 <button class="btn sm dan" onclick="delC('${c.id}')">🗑</button>
               </td>
-            </tr>`;}).join('')}
+            </tr>`;}).join('');}).join('')}
         </tbody>
-      </table></div>
+      </table>${campProductListHtml()}</div>
     </div>`;
     return;
   }
@@ -1756,6 +1778,7 @@ function pgCampaign(){
     `<div class="dw"><span>날짜</span><input type="date" value="${c.date}" onchange="updCDate('${c.id}',this.value)"></div>
      <button class="btn pri" onclick="openAddCP('${c.id}')">＋ 인원 추가</button>
      <button class="btn" onclick="openPasteCP('${c.id}')">📋 붙여넣기</button>
+     <button class="btn" onclick="openEditCamp('${c.id}')">✏️ 제품·차수</button>
      <button class="btn suc" onclick="expC('${c.id}')">⬇ 엑셀</button>
      <button class="btn dan ico" onclick="delC('${c.id}')">✕</button>`;
   document.getElementById('page').innerHTML=`${subHtml}
@@ -1767,13 +1790,13 @@ function pgCampaign(){
     <div class="sc"><div class="sc-l">평균 팔로워</div><div class="sc-n" style="font-size:16px">${c.people.length?Math.round(totalF/c.people.length).toLocaleString():0}</div></div>
   </div>
   <div class="tw">
-    <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':'♻️'} ${c.name} ${c.round}차</h3><span class="sub">총 ${c.people.length}명${cur.campType==='릴스'?' · '+totalFee+'만원':''}</span></div>
+    <div class="tw-h"><h3>${cur.campType==='릴스'?'🎬':cur.campType==='2차 활용'?'♻️':'📌'} ${e(campLabel(c))}</h3><span class="sub">총 ${c.people.length}명${cur.campType==='릴스'?' · '+totalFee+'만원':''}</span></div>
     <div class="tsc"><table>
       <thead><tr><th>#</th><th>활동명</th><th>채널</th><th>팔로워</th><th>제품</th><th>발송일</th><th>업로드일</th><th>연락처</th><th>배송지</th><th>단가</th><th>비고</th><th></th></tr></thead>
       <tbody>${c.people.length===0?`<tr><td colspan="12" class="nodata">인원을 추가해주세요</td></tr>`:
         c.people.map((p,i)=>`<tr>
           <td style="color:#ccc">${i+1}</td>
-          <td style="font-weight:700">${e(p.handle)}${scopeProj(p)!=='기본'?` <span title="이 시딩 종류에서 진행한 기록" style="font-size:9px;font-weight:600;color:#5B21B6;background:#EDE9FE;border-radius:10px;padding:1px 6px">${e(projLabel(scopeProj(p)))}</span>`:''}${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):''}</td>
+          <td style="font-weight:700">${e(p.handle)} <select title="시딩 종류 딱지 — 눌러서 바꿀 수 있어요 (예: 스웨이드 빅백 시딩)" onchange="updCPProject('${c.id}','${p.id}',this.value)" style="font-size:9px;font-weight:600;color:#5B21B6;background:#EDE9FE;border:none;border-radius:10px;padding:1px 3px;cursor:pointer;font-family:inherit;max-width:130px">${projOptionsHtml(scopeProj(p))}</select>${getPostUrls(p).length?getPostUrls(p).map(function(u){return ` <a href="${e(u)}" target="_blank" title="게시물 보기" style="text-decoration:none;font-size:11px">🔗</a>`;}).join(''):''}</td>
           <td>${p.url?`<a href="${e(p.url)}" target="_blank" style="font-size:11px">${e(p.url.replace('https://','').slice(0,20))}…</a>`:'-'}</td>
           <td style="font-size:11px">${p.followers?p.followers.toLocaleString():'-'}</td>
           <td style="max-width:160px;font-size:11px">${e(prodStr(p))||'<span style="color:#bbb">미정</span>'}</td>
@@ -1802,7 +1825,7 @@ function pgHistory(){
      <button class="btn suc" onclick="expHistory()">⬇ 통합 엑셀</button>`;
   const map={};
   DB.weekly.forEach(w=>w.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].seedings.push({round:w.round,date:w.date,products:p.products||(p.product?[p.product]:[]),monthRound:getMonthRound(w.id)});}));
-  DB.campaigns.forEach(c=>c.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].camps.push({name:c.name,type:c.type,round:c.round,product:p.product,fee:p.fee,note:p.note});}));
+  DB.campaigns.forEach(c=>c.people.forEach(p=>{const k=normH(p.handle);if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};map[k].camps.push({name:c.name,type:c.type,round:c.round,cprod:c.product||'',product:p.product,fee:p.fee,note:p.note});}));
   const search=(document.getElementById('hist-search')?.value||prevSearch).trim().toLowerCase();
   let entries=Object.values(map).filter(x=>!search||normH(x.handle).includes(search.replace(/\s/g,'')));
   entries.sort((a,b)=>(b.camps.length>0?1:0)-(a.camps.length>0?1:0)||(Math.max(0,...b.seedings.map(s=>s.round))-Math.max(0,...a.seedings.map(s=>s.round))));
@@ -1830,7 +1853,7 @@ function pgHistory(){
           <td>${statusBadge(x)}</td>
           <td style="font-size:11px;color:var(--g2);font-weight:600">${x.seedings.map(s=>s.monthRound||s.round+'차').join(', ')||'-'}</td>
           <td style="font-size:11px;max-width:140px">${[...new Set(x.seedings.flatMap(s=>s.products||(s.product?[s.product]:[])).filter(Boolean))].join('<br>')||'-'}</td>
-          <td style="font-size:11px">${x.camps.map(c=>`<span style="font-size:10px;padding:1px 6px;border-radius:4px;${c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':'background:#EEF2FF;color:#3730A3'}">${c.name} ${c.round}차</span>`).join(' ')||'-'}</td>
+          <td style="font-size:11px">${x.camps.map(c=>`<span style="font-size:10px;padding:1px 6px;border-radius:4px;${c.type==='2차 활용'?'background:#D1FAE5;color:#065F46':'background:#EEF2FF;color:#3730A3'}">${e((c.cprod?c.cprod+' · ':'')+c.name+' '+c.round+'차')}</span>`).join(' ')||'-'}</td>
           <td style="font-size:11px;max-width:140px">${[...new Set(x.camps.map(c=>c.product).filter(Boolean))].join('<br>')||'-'}</td>
           <td style="font-size:11px">${x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-'}</td>
         </tr>`).join('')}
@@ -2064,6 +2087,7 @@ function pgExposureGallery(){
   const catList=['전체','릴스캠페인','2차활용'].concat(customTypes.map(function(t){return 'camp:'+t;})).concat(['zvzo','브랜더진','⭐즐겨찾기']);
   const catLabel={'전체':'전체','릴스캠페인':'🎬 릴스 캠페인','2차활용':'♻️ 2차 활용','zvzo':'🔗 zvzo','브랜더진':'🏷 브랜더진','⭐즐겨찾기':'⭐ 즐겨찾기'};
   customTypes.forEach(function(t){ catLabel['camp:'+t]='📌 '+t; });
+  catLabel['zvzo']='🔗 '+collabName('zvzo'); catLabel['브랜더진']='🏷 '+collabName('브랜더진');
   if(catList.indexOf(_galleryCat)<0) _galleryCat='전체'; // 삭제/이름변경된 유형 탭이 선택돼 있던 경우 방어
   const hiddenSet=new Set(DB.galleryHidden||[]);
   function notHidden(src){ return !hiddenSet.has(gallerySrcKey(src)); }
@@ -2086,9 +2110,12 @@ function pgExposureGallery(){
   }
 
   const groups=[];
+  // 캠페인 탭(릴스·2차 활용·직접 만든 유형)은 주간 리스트가 아니라 "캠페인 차수 → 참여자 전원"으로 보여줌
+  const isCampTab=(_galleryCat==='릴스캠페인'||_galleryCat==='2차활용'||_galleryCat.indexOf('camp:')===0);
 
   // 1) 주차별 그룹 (기존 로직)
   [...DB.weekly].sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).forEach(function(w){
+    if(isCampTab) return;
     let people=(w.people||[]);
     const pk=w.project||'기본';
     if(_galleryCat==='⭐즐겨찾기'){
@@ -2137,7 +2164,7 @@ function pgExposureGallery(){
       });
       if(!items.length) return;
       const icon=c.type==='릴스'?'🎬 ':(c.type==='2차 활용'?'♻️ ':'📌 ');
-      groups.push({key:'c-'+c.id,label:icon+c.name+' '+c.round+'차',dateLabel:c.date,items:items});
+      groups.push({key:'c-'+c.id,label:icon+campLabel(c),dateLabel:c.date,items:items});
     });
   }
 
@@ -2153,10 +2180,11 @@ function pgExposureGallery(){
         if(notHidden(it.src)) items.push(it);
       });
       if(!items.length) return;
-      groups.push({key:'collab-'+brand,label:(brand==='zvzo'?'🔗 ':'🏷 ')+brand+' 협업',dateLabel:'',items:items});
+      groups.push({key:'collab-'+brand,label:(brand==='zvzo'?'🔗 ':'🏷 ')+collabName(brand)+' 협업',dateLabel:'',items:items});
     });
   }
 
+  if(isCampTab) groups.sort(function(a,b){ return (b.dateLabel||'').localeCompare(a.dateLabel||''); });   // 최근 차수가 위로
   let totalPosted=0,totalPending=0;
   groups.forEach(function(g){ g.items.forEach(function(x){ if(x.posted) totalPosted++; else totalPending++; }); });
 
@@ -3179,21 +3207,144 @@ function openLinkW(mid){
 }
 function saveLinkW(mid){DB.monthly.find(x=>x.id===mid).weekIds.push(g('f1'));save();renderSB();renderPage();cm();toast('연결됨');}
 
+// ══════════════════════════════
+//  캠페인: 어떤 제품의 몇 차수인지 (제품별로 묶어서 표시)
+// ══════════════════════════════
+// 제품 선택 (사이드바 맨 위): '__all' = 전체, '' = 제품 미지정, 그 외 = 제품 이름
+function campProductChips(){
+  const names=[];
+  (DB.campProducts||[]).forEach(n=>{ if(n&&names.indexOf(n)<0) names.push(n); });
+  DB.campaigns.forEach(c=>{ if(c.product&&names.indexOf(c.product)<0) names.push(c.product); });
+  return names;
+}
+function curCampProduct(){ const p=cur.campProduct; return (p===undefined||p===null)?'__all':p; }
+function ensureCampProduct(){
+  const p=curCampProduct(); if(p==='__all') return;
+  if(p===''){ if(!DB.campaigns.some(c=>!c.product)) cur.campProduct='__all'; return; }
+  if(campProductChips().indexOf(p)<0) cur.campProduct='__all';
+}
+function campInProduct(c){ const p=curCampProduct(); return p==='__all'||(c.product||'')===p; }
+function setCampProduct(p){
+  cur.campProduct=p; cur.id=null; ensureCampProduct();
+  if(curCampProduct()!=='__all'){   // 현재 유형에 이 제품 차수가 없으면, 차수가 있는 유형으로 이동
+    const here=DB.campaigns.some(c=>c.type===cur.campType&&campInProduct(c));
+    if(!here){ const f=DB.campaigns.find(campInProduct); if(f) cur.campType=f.type; }
+  }
+  renderSB(); renderPage();
+}
+function openCampProductManager(){
+  const names=campProductChips();
+  const cnt={}; DB.campaigns.forEach(c=>{ const k=c.product||''; cnt[k]=(cnt[k]||0)+1; });
+  const ist='padding:7px 9px;border:1px solid #e0e0e0;border-radius:7px;font-size:13px;font-family:inherit';
+  om(`<div class="mh"><h3>📦 캠페인 제품 관리</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <p style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.6">제품별로 캠페인 차수를 따로 관리해요. 제품 이름을 바꾸면 그 제품의 차수 전체에 같이 반영돼요.</p>
+    ${names.length?names.map((n,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+      <input value="${e(n)}" style="${ist};flex:1" onchange="campProdRename(${i},this.value)">
+      <span style="font-size:11px;color:#aaa;white-space:nowrap">${cnt[n]||0}개 차수</span>
+      <button class="btn sm dan" onclick="campProdDelete(${i})">🗑</button>
+    </div>`).join(''):'<div style="font-size:12px;color:#aaa;margin-bottom:10px">아직 제품이 없어요. 아래에서 추가해주세요.</div>'}
+    <div class="sec" style="margin-top:16px">새 제품 추가</div>
+    <div style="display:flex;gap:6px">
+      <input id="np-camp-name" placeholder="예: 26 FW Suede Bag" style="${ist};flex:1" onkeydown="if(event.key==='Enter')campProdAdd()">
+      <button class="btn pri" onclick="campProdAdd()">추가</button>
+    </div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">닫기</button></div>`);
+  setTimeout(()=>{ const el=document.getElementById('np-camp-name'); if(el) el.focus(); },50);
+}
+function campProdAdd(){
+  const name=(document.getElementById('np-camp-name').value||'').trim();
+  if(!name){ toast('제품 이름을 입력해주세요'); return; }
+  const key=x=>String(x).replace(/\s+/g,'').toLowerCase();
+  if(campProductChips().some(n=>key(n)===key(name))){ toast('이미 있는 제품이에요'); return; }
+  DB.campProducts=(DB.campProducts||[]).concat([name]); save();
+  cur.campProduct=name; cur.id=null; cm(); renderSB(); renderPage();
+  toast('"'+name+'" 제품이 만들어졌어요. ＋ 새 차수로 캠페인을 추가하세요');
+}
+function campProdRename(i,val){
+  const names=campProductChips(); const old=names[i]; const nn=String(val||'').trim();
+  if(old===undefined) return;
+  if(!nn){ toast('이름은 비울 수 없어요'); openCampProductManager(); return; }
+  const key=x=>String(x).replace(/\s+/g,'').toLowerCase();
+  if(names.some((n,j)=>j!==i&&key(n)===key(nn))){ toast('이미 있는 제품 이름이에요'); openCampProductManager(); return; }
+  const reg=DB.campProducts||[];
+  DB.campProducts=reg.indexOf(old)>=0?reg.map(n=>n===old?nn:n):reg.concat([nn]);
+  DB.campaigns.forEach(c=>{ if(c.product===old) c.product=nn; });
+  if(cur.campProduct===old) cur.campProduct=nn;
+  save(); renderSB(); renderPage(); openCampProductManager();
+}
+function campProdDelete(i){
+  const names=campProductChips(); const old=names[i]; if(old===undefined) return;
+  const n=DB.campaigns.filter(c=>c.product===old).length;
+  if(!confirm('"'+old+'" 제품을 삭제할까요?'+(n?'\n이 제품의 차수 '+n+'개는 삭제되지 않고 "제품 미지정"으로 옮겨져요.':''))) return;
+  DB.campProducts=(DB.campProducts||[]).filter(x=>x!==old);
+  DB.campaigns.forEach(c=>{ if(c.product===old) c.product=''; });
+  if(cur.campProduct===old) cur.campProduct='__all';
+  save(); renderSB(); renderPage(); openCampProductManager();
+}
+function campLabel(c){ return (c.product?c.product+' · ':'')+c.name+' '+c.round+'차'; }
+function campNextRound(type,product){          // 같은 유형 + 같은 제품 안에서 다음 차수
+  const same=DB.campaigns.filter(c=>c.type===type&&(c.product||'')===(product||''));
+  return same.length?Math.max.apply(null,same.map(c=>c.round))+1:1;
+}
+function campProductNames(){                   // 제품 입력 때 보여줄 후보 (이미 쓴 제품 + 캠페인 인원들이 받은 제품)
+  const set=new Set();
+  campProductChips().forEach(n=>set.add(n));
+  DB.campaigns.forEach(c=>(c.people||[]).forEach(p=>prodList(p).forEach(x=>{ if(set.size<80) set.add(x); })));
+  return [...set];
+}
+function campProductListHtml(){ return '<datalist id="camp-prod-list">'+campProductNames().map(n=>'<option value="'+e(n)+'">').join('')+'</datalist>'; }
+function campGroups(list){                     // 제품별 묶음 (제품 미지정은 맨 뒤, 차수는 큰 순)
+  const map=new Map();
+  list.forEach(c=>{ const k=c.product||''; if(!map.has(k)) map.set(k,[]); map.get(k).push(c); });
+  const keys=[...map.keys()].sort((a,b)=>((a===''?1:0)-(b===''?1:0))||a.localeCompare(b,'ko'));
+  return keys.map(k=>({product:k,items:map.get(k).sort((a,b)=>b.round-a.round)}));
+}
+function updCProduct(cid,val){ const c=DB.campaigns.find(x=>x.id===cid); if(c){ c.product=String(val||'').trim(); save(); renderSB(); renderPage(); toast('제품 수정됨'); } }
+function openEditCamp(cid){
+  const c=DB.campaigns.find(x=>x.id===cid); if(!c) return;
+  om(`<div class="mh"><h3>✏️ ${e(campLabel(c))} — 제품·차수 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>제품 <span style="color:#aaa;font-size:10px">(어떤 제품의 캠페인인지)</span></label><input id="ec-prod" list="camp-prod-list" value="${e(c.product||'')}" placeholder="예: 26 FW Suede Bag"></div>
+    <div class="fr"><label>캠페인 이름 <span style="color:#aaa;font-size:10px">(비우면 "${e(c.type)} 캠페인")</span></label><input id="ec-name" value="${e(c.name||'')}" placeholder="${e(c.type)} 캠페인"></div>
+    <div class="fg">
+      <div class="fr"><label>차수</label><input id="ec-round" type="number" min="1" value="${c.round}"></div>
+      <div class="fr"><label>날짜</label><input id="ec-date" type="date" value="${c.date}"></div>
+    </div>
+    ${campProductListHtml()}
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCamp('${c.id}')">저장</button></div>`);
+}
+function saveEditCamp(cid){
+  const c=DB.campaigns.find(x=>x.id===cid); if(!c) return;
+  c.product=g('ec-prod').trim(); c.name=g('ec-name').trim()||(c.type+' 캠페인'); c.round=parseInt(g('ec-round'))||c.round; c.date=g('ec-date')||c.date;
+  save(); renderSB(); renderPage(); cm(); toast('수정됨');
+}
+
 // 캠페인 차수 추가
 function openAddCampRound(){
-  const existing=DB.campaigns.filter(c=>c.type===cur.campType);
-  const next=existing.length?Math.max(...existing.map(c=>c.round))+1:1;
-  om(`<div class="mh"><h3>${cur.campType==='릴스'?'🎬':'♻️'} 새 ${cur.campType} ${next}차</h3><button class="btn ico" onclick="cm()">✕</button></div>
-  <div class="mb"><div class="fg">
-    <div class="fr"><label>차수</label><input id="f1" type="number" value="${next}" min="1"></div>
-    <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
-  </div></div>
+  const type=cur.campType;
+  const curC=cur.id?DB.campaigns.find(x=>x.id===cur.id&&x.type===type):null;
+  const _sel=curCampProduct();
+  const prod0=_sel!=='__all'?_sel:((curC&&curC.product)||'');
+  const next=campNextRound(type,prod0);
+  om(`<div class="mh"><h3>${type==='릴스'?'🎬':type==='2차 활용'?'♻️':'📌'} 새 ${e(type)} 캠페인</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>제품 <span style="color:#aaa;font-size:10px">(어떤 제품의 캠페인인지 · 비워도 돼요)</span></label><input id="f3" list="camp-prod-list" value="${e(prod0)}" placeholder="예: 26 FW Suede Bag" data-type="${e(type)}" oninput="document.getElementById('f1').value=campNextRound(this.dataset.type,this.value.trim())"></div>
+    <div class="fr"><label>캠페인 이름 <span style="color:#aaa;font-size:10px">(비우면 "${e(type)} 캠페인")</span></label><input id="f4" placeholder="${e(type)} 캠페인"></div>
+    <div class="fg">
+      <div class="fr"><label>차수 <span style="color:#aaa;font-size:10px">(제품별로 자동)</span></label><input id="f1" type="number" value="${next}" min="1"></div>
+      <div class="fr"><label>날짜</label><input id="f2" type="date" value="${today()}"></div>
+    </div>
+    ${campProductListHtml()}
+  </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCampRound()">추가</button></div>`);
 }
 function saveAddCampRound(){
-  const type=cur.campType,round=parseInt(g('f1'))||1,date=g('f2'),id='c'+uid();
-  DB.campaigns.push({id,name:type+' 캠페인',type,round,date,people:[]});
-  save();selC(id);cm();toast(`${type} ${round}차 추가됨`);
+  const type=cur.campType,round=parseInt(g('f1'))||1,date=g('f2'),product=g('f3').trim(),id='c'+uid();
+  DB.campaigns.push({id,name:g('f4').trim()||(type+' 캠페인'),type,round,product,date,people:[]});
+  save();selC(id);cm();toast(`${product?product+' · ':''}${type} ${round}차 추가됨`);
 }
 
 // 새 캠페인 유형 추가
@@ -3230,7 +3381,7 @@ function pgCollabTab(brand, subHtml){
       +'</tr>';
   }).join('');
   document.getElementById('page').innerHTML=subHtml
-    +'<div class="tw"><div class="tw-h"><h3>'+(brand==='zvzo'?'🔗':'🏷')+' '+brand+' 협업 일정</h3><span class="sub">'+items.length+'건</span></div>'
+    +'<div class="tw"><div class="tw-h"><h3>'+(brand==='zvzo'?'🔗':'🏷')+' '+e(collabName(brand))+' 협업 일정</h3><span class="sub">'+items.length+'건</span></div>'
     +'<div class="tsc"><table>'
     +'<thead><tr><th>협업자/채널</th><th>유형</th><th>제품</th><th>시작일</th><th>종료일</th><th>상태</th><th>단가</th><th>비고</th><th></th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div></div>';
@@ -3240,7 +3391,7 @@ function openAddCollab(brand){
   var d=today();
   var opts=collabTypeOpts(brand);
   var optHtml=opts.map(function(o){return '<option value="'+o+'">'+o+'</option>';}).join('');
-  om('<div class="mh"><h3>'+brand+' 협업 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>'
+  om('<div class="mh"><h3>'+e(collabName(brand))+' 협업 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>'
     +'<div class="mb">'
     +'<div class="fg"><div class="fr"><label>협업자 이름</label><input id="cl1" placeholder="예: 새부리님"></div><div class="fr"><label>채널 아이디</label><input id="cl2" placeholder="예: newbird_kim"></div></div>'
     +'<div class="fr"><label>유형</label><select id="cl7">'+optHtml+'</select></div>'
@@ -3292,28 +3443,37 @@ function delCollab(id){
   save();pgCampaign();toast('삭제됨');
 }
 
+function collabName(brand){ return (DB.collabLabels&&DB.collabLabels[brand])||brand; }   // 화면에 보이는 협업 탭 이름
 function renameCollab(brand){
-  var newName=prompt('새 이름 입력', brand);
-  if(!newName||!newName.trim()||newName.trim()===brand) return;
+  var now=collabName(brand);
+  var newName=prompt('새 이름 입력', now);
+  if(!newName||!newName.trim()||newName.trim()===now) return;
   newName=newName.trim();
-  DB.collabs.forEach(function(c){if(c.brand===brand) c.brand=newName;});
-  save();pgCampaign();toast('이름 변경됨');
+  if(!DB.collabLabels) DB.collabLabels={};
+  DB.collabLabels[brand]=newName;   // 표시 이름만 바꿈 (협업 데이터·분류 기준은 그대로)
+  save();renderSB();pgCampaign();toast('이름 변경됨');
 }
 function deleteCollab(brand){
   var cnt=(DB.collabs||[]).filter(function(c){return c.brand===brand;}).length;
-  if(!confirm(brand+' 협업 탭을 삭제할까요?\n(협업 데이터 '+cnt+'건도 삭제됩니다)')) return;
+  if(!confirm(collabName(brand)+' 협업 탭을 삭제할까요?\n(협업 데이터 '+cnt+'건도 삭제됩니다)')) return;
   DB.collabs=DB.collabs.filter(function(c){return c.brand!==brand;});
   if(cur.campType==='__zvzo'||cur.campType==='__branderz') cur.campType='릴스';
-  save();pgCampaign();toast(brand+' 탭 삭제됨');
+  save();pgCampaign();toast(collabName(brand)+' 탭 삭제됨');
 }
 
 function renameCampType(type){
   var newName=prompt('새 이름 입력', type);
   if(!newName||!newName.trim()||newName.trim()===type) return;
   newName=newName.trim();
-  DB.campaigns.forEach(function(c){if(c.type===type) c.type=newName;});
+  if(DB.campaigns.some(function(c){return c.type===newName;})){ alert('"'+newName+'" 유형이 이미 있어요. 다른 이름을 입력해주세요.'); return; }
+  DB.campaigns.forEach(function(c){
+    if(c.type===type){
+      if(c.name===type+' 캠페인') c.name=newName+' 캠페인';   // 기본 이름이면 같이 바꿈 (직접 지은 이름은 그대로)
+      c.type=newName;
+    }
+  });
   if(cur.campType===type) cur.campType=newName;
-  save();pgCampaign();toast('이름 변경됨');
+  save();renderSB();pgCampaign();toast('이름 변경됨');
 }
 function deleteCampType(type){
   var cnt=DB.campaigns.filter(function(c){return c.type===type;}).length;
@@ -3330,26 +3490,33 @@ function openNewCampType(){
   om(`<div class="mh"><h3>새 캠페인 유형 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
     <div class="fr"><label>유형 이름</label><input id="f1" placeholder="예: 유튜브 협찬, 브랜디드 콘텐츠 등"></div>
+    <div class="fr"><label>제품 <span style="color:#aaa;font-size:10px">(선택 · 어떤 제품의 캠페인인지)</span></label><input id="f3" list="camp-prod-list" value="${e(curCampProduct()!=='__all'?curCampProduct():'')}" placeholder="예: 26 FW Suede Bag"></div>
     <div class="fg">
       <div class="fr"><label>1차 날짜</label><input id="f2" type="date" value="${today()}"></div>
     </div>
+    ${campProductListHtml()}
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveNewCampType()">추가</button></div>`);
 }
 function saveNewCampType(){
   const type=g('f1').trim();if(!type){alert('유형 이름 필수');return;}
   const date=g('f2'),id='c'+uid();
-  DB.campaigns.push({id,name:type+' 캠페인',type,round:1,date,people:[]});
+  DB.campaigns.push({id,name:type+' 캠페인',type,round:1,product:g('f3').trim(),date,people:[]});
   cur.campType=type;save();selC(id);cm();toast(`${type} 캠페인 추가됨`);
 }
 
 // 캠페인 인원 추가/수정
+function updCPProject(cid,pid,proj){
+  const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid); if(!p||!proj) return;
+  p.project=proj; save(); renderSB(); renderPage(); toast(p.handle+' → '+projLabel(proj)+' 딱지로 변경');
+}
 function openAddCP(cid){
   const c=DB.campaigns.find(x=>x.id===cid);if(!c)return;
   const isReels=c.type==='릴스';
-  om(`<div class="mh"><h3>${c.name} ${c.round}차 — 인원 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  om(`<div class="mh"><h3>${e(campLabel(c))} — 인원 추가</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
     <div class="fg"><div class="fr"><label>활동명</label><input id="fh" placeholder="전지혜(zee.hye)"></div><div class="fr"><label>채널 URL</label><input id="fu" placeholder="https://..."></div></div>
+    <div class="fr"><label>시딩 종류 딱지 <span style="color:#aaa;font-size:10px">(어느 시딩에서 진행한 건지)</span></label><select id="fproj">${projOptionsHtml((c.people&&c.people.length?scopeProj(c.people[c.people.length-1]):'기본'))}</select></div>
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" placeholder="0"></div><div class="fr"><label>컨택 포인트</label><input id="fc" placeholder="DM, 이메일, 전화번호 등 연락 경로"></div></div>
     ${prodFieldsHtml([])}
     <div class="fr"><label>배송지</label><input id="fa" placeholder="서울시..."></div>
@@ -3362,7 +3529,7 @@ function openAddCP(cid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveAddCP('${cid}')">추가</button></div>`);
 }
-function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),project:inferProject(handle),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),...prodFields(),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
+function saveAddCP(cid){const c=DB.campaigns.find(x=>x.id===cid),handle=g('fh');if(!handle){alert('활동명 필수');return;}c.people.push({id:'cp'+uid(),project:g('fproj')||inferProject(handle),handle,url:g('fu'),followers:parseInt(g('ff'))||0,contact:g('fc'),...prodFields(),address:g('fa'),postUrls:g('fpost').split('\n').map(s=>s.trim()).filter(Boolean),sendDate:g('fsend'),uploadDate:g('fupload'),fee:g('fee'),note:g('fn')});save();renderSB();renderPage();cm();toast('인원 추가됨');}
 
 function openEditCP(cid,pid){
   const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;
@@ -3370,6 +3537,7 @@ function openEditCP(cid,pid){
   om(`<div class="mh"><h3>인원 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
   <div class="mb">
     <div class="fg"><div class="fr"><label>활동명</label><input id="fh" value="${e(p.handle)}"></div><div class="fr"><label>채널 URL</label><input id="fu" value="${e(p.url)}"></div></div>
+    <div class="fr"><label>시딩 종류 딱지 <span style="color:#aaa;font-size:10px">(어느 시딩에서 진행한 건지)</span></label><select id="fproj">${projOptionsHtml(scopeProj(p))}</select></div>
     <div class="fg"><div class="fr"><label>팔로워</label><input id="ff" type="number" value="${p.followers||0}"></div><div class="fr"><label>컨택 포인트</label><input id="fc" value="${e(p.contact)}"></div></div>
     ${prodFieldsHtml(prodList(p))}
     <div class="fr"><label>배송지</label><input id="fa" value="${e(p.address||'')}"></div>
@@ -3382,13 +3550,13 @@ function openEditCP(cid,pid){
   </div>
   <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditCP('${cid}','${pid}')">저장</button></div>`);
 }
-function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.followers=parseInt(g('ff'))||0;p.contact=g('fc');Object.assign(p,prodFields());p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
+function saveEditCP(cid,pid){const p=DB.campaigns.find(x=>x.id===cid)?.people.find(x=>x.id===pid);if(!p)return;p.handle=g('fh');p.url=g('fu');p.project=g('fproj')||p.project;p.followers=parseInt(g('ff'))||0;p.contact=g('fc');Object.assign(p,prodFields());p.address=g('fa');p.postUrls=g('fpost').split('\n').map(s=>s.trim()).filter(Boolean);delete p.postUrl;p.sendDate=g('fsend');p.uploadDate=g('fupload');p.fee=g('fee');p.note=g('fn');save();renderPage();cm();toast('수정됨');}
 
 // ══════════════════════════════
 //  UPDATE / DELETE
 // ══════════════════════════════
 // 월 기준 상대 차수 계산 (표시용)
-function getMonthRoundPlain(wid){
+function getMonthRoundAuto(wid){
   const w=DB.weekly.find(x=>x.id===wid);if(!w)return '';
   const proj=w.project||'기본';
   const ym=w.date.slice(0,7);
@@ -3396,7 +3564,30 @@ function getMonthRoundPlain(wid){
   const idx=sameMonth.findIndex(x=>x.id===wid);
   return `${parseInt(ym.slice(5))}월 ${idx+1}차`;
 }
-function getMonthRound(wid){
+function getMonthRoundPlain(wid){   // 직접 정한 이름이 있으면 그 이름, 없으면 "N월 M차" 자동
+  const w=DB.weekly.find(x=>x.id===wid);if(!w)return '';
+  return (w.label&&String(w.label).trim())||getMonthRoundAuto(wid);
+}
+function updWLabel(wid,val){const w=DB.weekly.find(x=>x.id===wid);if(w){w.label=String(val||'').trim();save();renderSB();renderPage();toast(w.label?'차수 이름 수정됨':'자동 이름으로 되돌림');}}
+function openEditW(wid){
+  const w=DB.weekly.find(x=>x.id===wid); if(!w) return;
+  om(`<div class="mh"><h3>✏️ ${e(getMonthRound(wid))} 수정</h3><button class="btn ico" onclick="cm()">✕</button></div>
+  <div class="mb">
+    <div class="fr"><label>차수 이름 <span style="color:#aaa;font-size:10px">(비우면 자동: ${e(getMonthRoundAuto(wid))})</span></label><input id="ew-label" value="${e(w.label||'')}" placeholder="${e(getMonthRoundAuto(wid))}"></div>
+    <div class="fg">
+      <div class="fr"><label>차수 번호 <span style="color:#aaa;font-size:10px">(정렬 기준)</span></label><input id="ew-round" type="number" min="1" value="${w.round}"></div>
+      <div class="fr"><label>날짜</label><input id="ew-date" type="date" value="${w.date}"></div>
+    </div>
+    <div class="fr"><label>시딩 종류</label><select id="ew-proj">${projOptionsHtml(w.project||'기본')}</select></div>
+  </div>
+  <div class="mf"><button class="btn" onclick="cm()">취소</button><button class="btn pri" onclick="saveEditW('${w.id}')">저장</button></div>`);
+}
+function saveEditW(wid){
+  const w=DB.weekly.find(x=>x.id===wid); if(!w) return;
+  w.label=g('ew-label').trim(); w.round=parseInt(g('ew-round'))||w.round; w.date=g('ew-date')||w.date;
+  const np=g('ew-proj')||'기본'; if(np!==(w.project||'기본')){ w.project=np; _weeklyProject=np; }
+  save(); renderSB(); renderPage(); cm(); toast('수정됨');
+}function getMonthRound(wid){
   const w=DB.weekly.find(x=>x.id===wid);if(!w)return w?.round;
   return projPrefix(w.project||'기본')+getMonthRoundPlain(wid);
 }
@@ -3411,6 +3602,11 @@ function toggleShipped(wid,pid,checked){
 }
 function updWDate(wid,val){const w=DB.weekly.find(x=>x.id===wid);if(w){w.date=val;save();renderSB();toast('날짜 수정됨');}}
 function updWRound(wid,val){const w=DB.weekly.find(x=>x.id===wid);if(w){w.round=parseInt(val)||w.round;save();renderSB();renderPage();toast('차수 수정됨');}}
+function updMMonth(mid,val){
+  const m=DB.monthly.find(x=>x.id===mid); if(!m||!val) return;
+  if(DB.monthly.some(x=>x.id!==mid&&x.month===val)){ alert(val.replace('-','년 ')+'월 리스트가 이미 있어요.'); renderPage(); return; }
+  m.month=val; save(); renderSB(); renderPage(); toast('월 수정됨');
+}
 function updMNote(mid,val){const m=DB.monthly.find(x=>x.id===mid);if(m){m.note=val;save();toast('메모 수정됨');}}
 function updCDate(cid,val){const c=DB.campaigns.find(x=>x.id===cid);if(c){c.date=val;save();renderSB();toast('날짜 수정됨');}}
 function updCRound(cid,val){const c=DB.campaigns.find(x=>x.id===cid);if(c){c.round=parseInt(val)||c.round;save();renderSB();renderPage();toast('차수 수정됨');}}
@@ -3511,7 +3707,7 @@ function expC(cid){
   const wb=XLSX.utils.book_new();
   const isReels=c.type==='릴스';
   const rows=[
-    [`${c.name} ${c.round}차  |  ${c.date}`,'','','','','','',''],
+    [`${campLabel(c)}  |  ${c.date}`,'','','','','','',''],
     ['','','','','','','',''],
     isReels?['#','활동명','채널 URL','팔로워','제품','컨택포인트','배송지','비용','특이사항']:
             ['#','활동명','채널 URL','팔로워','제품','컨택포인트','배송지','비고']
@@ -3525,8 +3721,8 @@ function expC(cid){
   const ws=XLSX.utils.aoa_to_sheet(rows);
   ws['!cols']=isReels?[{wch:4},{wch:20},{wch:36},{wch:10},{wch:36},{wch:28},{wch:36},{wch:10},{wch:28}]:
                       [{wch:4},{wch:20},{wch:36},{wch:10},{wch:36},{wch:28},{wch:36},{wch:28}];
-  XLSX.utils.book_append_sheet(wb,ws,c.name+c.round+'차');
-  XLSX.writeFile(wb,`${c.name}_${c.round}차.xlsx`);
+  XLSX.utils.book_append_sheet(wb,ws,((c.product?c.product+' ':'')+c.name+c.round+'차').replace(/[\\\/?*\[\]:]/g,'').slice(0,31));
+  XLSX.writeFile(wb,`${(c.product?c.product+'_':'')+c.name}_${c.round}차.xlsx`);
   toast('엑셀 다운로드 완료');
 }
 
@@ -3540,7 +3736,7 @@ function expHistory(){
   DB.campaigns.forEach(c=>c.people.forEach(p=>{
     const k=normH(p.handle);
     if(!map[k])map[k]={handle:p.handle,followers:p.followers,seedings:[],camps:[]};
-    map[k].camps.push({name:c.name,type:c.type,round:c.round,product:p.product,fee:p.fee});
+    map[k].camps.push({name:c.name,type:c.type,round:c.round,cprod:c.product||'',product:p.product,fee:p.fee});
   }));
   const entries=Object.values(map).sort((a,b)=>(b.camps.length>0?1:0)-(a.camps.length>0?1:0));
   const wb=XLSX.utils.book_new();
@@ -3550,14 +3746,14 @@ function expHistory(){
     x.camps.length>0&&x.seedings.length>0?'시딩+캠페인':x.camps.length>0?'캠페인만':'시딩',
     x.seedings.map(s=>s.monthRound||s.round+'차').join(', ')||'-',
     [...new Set(x.seedings.flatMap(s=>s.products||(s.product?[s.product]:[])).filter(Boolean))].join(' / ')||'-',
-    x.camps.map(c=>c.name+' '+c.round+'차').join(', ')||'-',
+    x.camps.map(c=>(c.cprod?c.cprod+' · ':'')+c.name+' '+c.round+'차').join(', ')||'-',
     x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-']));
   const ws1=XLSX.utils.aoa_to_sheet(rows1);
   ws1['!cols']=[{wch:4},{wch:20},{wch:10},{wch:12},{wch:14},{wch:36},{wch:24},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws1,'인물별 진행이력');
   const dual=entries.filter(x=>x.camps.length>0&&x.seedings.length>0);
   const rows2=[['시딩 → 캠페인 전환 인원','','','',''],['','','','',''],['활동명','팔로워','시딩 차수','캠페인','비용']];
-  dual.forEach(x=>rows2.push([x.handle,x.followers||'',x.seedings.map(s=>s.round+'차').join(', '),x.camps.map(c=>c.name+' '+c.round+'차').join(', '),x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-']));
+  dual.forEach(x=>rows2.push([x.handle,x.followers||'',x.seedings.map(s=>s.round+'차').join(', '),x.camps.map(c=>(c.cprod?c.cprod+' · ':'')+c.name+' '+c.round+'차').join(', '),x.camps.map(c=>c.fee).filter(Boolean).join(', ')||'-']));
   const ws2=XLSX.utils.aoa_to_sheet(rows2);
   ws2['!cols']=[{wch:20},{wch:10},{wch:14},{wch:24},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws2,'시딩→캠페인 전환');
@@ -3684,6 +3880,8 @@ try {
       DB.screenshots = data.screenshots || [];
       DB.galleryHidden = data.galleryHidden || [];
       DB.projects = data.projects || [];
+      DB.campProducts = data.campProducts || [];
+      DB.collabLabels = data.collabLabels || {};
     } else {
       seed();
       await window._fbSave();
@@ -3727,6 +3925,8 @@ onSnapshot(DB_DOC, (snap) => {
       DB.screenshots = data.screenshots || [];
       DB.galleryHidden = data.galleryHidden || [];
       DB.projects = data.projects || [];
+      DB.campProducts = data.campProducts || [];
+      DB.collabLabels = data.collabLabels || {};
       if(typeof stampProjectScope==='function') stampProjectScope();
       if(typeof undoReset==='function') undoReset(); // 다른 기기/자동 캡처로 바뀐 데이터를 덮어쓰지 않도록 되돌리기 기록 초기화
       renderSB();

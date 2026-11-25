@@ -3964,5 +3964,24 @@ onSnapshot(DB_DOC, (snap) => {
   }
 });
 </script>
+<script>
+(function () {
+  function openCostFromHash() {
+    var m = (location.hash || '').match(/^#cost[=\/](\d{4}-\d{2})$/);
+    if (!m) return;
+    var tries = 0;
+    (function wait() {
+      if (typeof DB !== 'undefined' && DB && Array.isArray(DB.cost) && DB.cost.length) {
+        mainTab('cost');
+        costOpenMonth(m[1]);
+      } else if (tries++ < 50) {
+        setTimeout(wait, 200);
+      }
+    })();
+  }
+  window.addEventListener('hashchange', openCostFromHash);
+  openCostFromHash();
+})();
+</script>
 </body>
 </html>
